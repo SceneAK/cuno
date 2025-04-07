@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "termux-android-arm64",
+      "description": "Build in termux for Android arm64",
+      "generator": "Ninja",
+      "environment":{
+	"ANDROID_NDK": "$env{PREFIX}/ndk"
+      },
+      "cacheVariables": {
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-21",
+        "ANDROID_STL": "none",
+	"ANDROID_NDK": "$env{ANDROID_NDK}",
+
+	"CMAKE_TOOLCHAIN_FILE": "${sourceDir}/termux.toolchain.cmake"
+      }
+    }
+  ]
+}
