@@ -1,8 +1,6 @@
-#include <android/log.h>
-#include <android_native_app_glue.h>
+#include "platform/logging.h"
+#include "main.h"
 
-void android_main(struct android_app* app) {
-    app_dummy();
-
-    __android_log_print(ANDROID_LOG_INFO, "CunoApp", "NativeActivity started!");
+int main(){
+    LOG("OMG");
 }

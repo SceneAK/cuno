@@ -1,8 +1,5 @@
-# Suggested Ignores by ChatGPT
-# Ignore build directories
+# Ignore build dir
 /build/
-/libs/
-/obj/
 *.so
 *.o
 *.a
@@ -12,24 +9,19 @@
 /CMakeCache.txt
 /Makefile
 /cmake_install.cmake
-compile_commands.json
 
-# utils
-*.sh
+# Compiler & Clang
+/.cache/
+compile_commands.json
 
 # Android-specific files
 *.apk
 *.ap_
-/out/
-/captures/
-/.externalNativeBuild/
-
-# Ignore Android NDK and SDK cache files
-**/ndk-build/
-**/local.properties
-**/.cxx/
-**/.externalNativeBuild/
 
 # Ignore signing keys (Important)
 *.keystore
 *.jks
+
+# Personal files
+*.env
+CMakeUserPresets.json
