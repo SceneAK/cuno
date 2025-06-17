@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    // Minimum for GameActivity is API 19 (Android 4.4) 
+    compileSdk      33
+    defaultConfig {
+        applicationId "com.sceneak.cunoandr"
+        minSdkVersion 19
+        targetSdkVersion 33
+        versionCode    1
+        versionName    "1.0"
+
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile "src/main/AndroidManifest.xml"
+            java.srcDirs = ["src/main/java"]
+            jniLibs.srcDirs = []
+        }
+    }
+
+    // Enable Prefab, so the GameActivity AAR can expose its native static library to CMake
+    buildFeatures {
+        prefab true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "../../CMakeLists.txt"
+        }
+    }
+}
+
+dependencies {
+    // Import GameActivity via Jetpack Android Games SDK; Prefab will expose its native libs 
+    implementation "com.google.androidgamesdk:game-activity:1.4.0"
+}
+

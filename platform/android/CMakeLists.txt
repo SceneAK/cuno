@@ -16,6 +16,11 @@ add_custom_target(outputdir DEPENDS ${COPY_STAMP})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_APP_DIR}/lib/${ANDROID_ABI})
 add_library(cuno SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c) 
 add_dependencies(cuno outputdir)
+# set_target_properties(cuno PROPERTIES 
+# C_STANDARD 90
+# C_EXTENSIONS OFF
+# )
+## This requires .h with no inline
 
 # Android Glue Object Compile
 set(GLUE_DIR "${ANDROID_NDK}/sources/android/native_app_glue")
@@ -24,4 +29,4 @@ add_library(android_glue OBJECT "${GLUE_DIR}/android_native_app_glue.c")
 target_link_libraries(cuno src android log android_glue)
 
 # call to aapt2, apksign, zipalign
-include(apk.cmake)
+# include(apk.cmake)

@@ -1,0 +1,1 @@
+/* write graphic.h and graphic.c per platform implementation. */

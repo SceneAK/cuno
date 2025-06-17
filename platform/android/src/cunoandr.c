@@ -10,4 +10,4 @@ void android_main(struct android_app* state) {
             if (source) source->process(state, source);
         }
     }
-}
+} // "I like hot men" -Kh 2025 
