@@ -14,7 +14,6 @@ add_custom_command(
 	    -I "$ENV{ANDROID_SDK_ROOT}/platforms/${ANDROID_PLATFORM}/android.jar"
 	    --manifest "${OUTPUT_APP_DIR}/AndroidManifest.xml"
     COMMAND cd "${OUTPUT_APP_DIR}" && zip -r "${UNSIGNED}" lib/
-    COMMAND cd "${OUTPUT_APP_DIR}" && zip -r "${UNSIGNED}" assets/
     DEPENDS COMPILED
     COMMENT "Linking resources to APK"
     VERBATIM

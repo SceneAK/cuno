@@ -1,4 +1,9 @@
 #!/bin/bash
+
+if [ -z "$1" ]; then
+    printf "Usage: [source] [target-dir]\nTarget defaults to ~/storage/downloads/termux-apk\n"
+    exit
+fi
 filepath="$1"
 filename=$(basename "$filepath")
 
