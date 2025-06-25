@@ -19,9 +19,9 @@ add_dependencies(cuno outputdir)
 
 # Android Glue Object Compile
 set(GLUE_DIR "${ANDROID_NDK}/sources/android/native_app_glue")
-target_include_directories(cuno PUBLIC ${GLUE_DIR})
+target_include_directories(cuno PRIVATE ${GLUE_DIR})
 add_library(android_glue OBJECT "${GLUE_DIR}/android_native_app_glue.c")
-target_link_libraries(cuno game_core android log android_glue)
+target_link_libraries(cuno game android log android_glue)
 
 # call to aapt2, apksign, zipalign
 include(apk.cmake)

@@ -1,6 +1,7 @@
-#include "platform/logging.h"
+#include "system/logging.h"
 #include "main.h"
 
-int main(){
-    LOG("OMG");
+int main()
+{
+
 }
