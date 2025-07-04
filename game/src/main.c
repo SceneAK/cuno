@@ -3,5 +3,5 @@
 
 int main()
 {
-
+    LOG(" == ENTERED MAIN == ");
 }

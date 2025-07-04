@@ -1,6 +1,6 @@
 #include <EGL/egl.h>
 #include <stdlib.h>
-#include <GLES/gl.h>
+#include <GLES2/gl2.h>
 #include "system/graphic/graphic.h"
 #include "system/logging.h"
 
@@ -18,43 +18,57 @@ static EGLint const required_attr[] = {
     EGL_NONE
 };
 
+
 struct graphic_session *graphic_session_create()
 {
-    struct graphic_session *session = malloc(sizeof(struct graphic_session));
-    return session;
-}
-
-int graphic_session_setup(struct graphic_session *session, void *native_window_handle)
-{
     EGLint num_config;
+    struct graphic_session *session = malloc(sizeof(struct graphic_session));
+
+    if(!session)
+        return NULL;
 
     session->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (session->display == EGL_NO_DISPLAY)
-        return -1;
+        goto err;
 
     if (eglInitialize(session->display, NULL, NULL) != EGL_TRUE)
-        return -1;
+        goto err;
 
     if (eglChooseConfig(session->display, required_attr, &session->config, 1, &num_config) != EGL_TRUE)
-        return -1;
+        goto err;
+    
+    return session;
+
+err:
+    free(session);
+    return NULL;
+}
+
+int graphic_session_switch_window(struct graphic_session *session, void *native_window_handle)
+{
+    eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (session->surface != NULL)
+        eglDestroySurface(session->display, session->surface);
+
+    if (session->context != NULL)
+        eglDestroyContext(session->display, session->context);
 
     session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, NULL);
     session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
-    if (session->surface == EGL_NO_SURFACE)
-        LOG("BAD NATIVE WINDOW");
-
     eglMakeCurrent(session->display, session->surface, session->surface, session->context);
+
+    if (session->surface == EGL_NO_SURFACE)
+        return -1;
     return 0;
 }
 
 int graphic_session_destroy(struct graphic_session *session)
 {
     eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    if (eglTerminate(session->display) == EGL_TRUE) {
-        free(session);
-        return 0;
-    }
-    return -1;
+    eglDestroySurface(session->display, session->surface);
+    eglDestroyContext(session->display, session->context);
+    eglTerminate(session->display);
+    return 0;
 }
 
 static float red = 0;

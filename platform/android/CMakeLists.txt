@@ -14,7 +14,7 @@ add_custom_target(outputdir DEPENDS ${COPY_STAMP})
 
 # Cuno Shared Library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_APP_DIR}/lib/${ANDROID_ABI})
-add_library(cuno SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c) 
+add_library(cuno SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c)
 add_dependencies(cuno outputdir)
 
 # Android Glue Object Compile
