@@ -7,3 +7,5 @@ int graphic_session_switch_window(struct graphic_session *session, void *native_
 int graphic_session_destroy(struct graphic_session *session);
 
 void graphic_gay_test(struct graphic_session *session);
+
+void graphic_draw(struct graphic_session *session);

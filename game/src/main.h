@@ -1,4 +1,9 @@
-#pragma once
+#ifndef MAIN_H
+#define MAIN_H
+#include "system/graphic/graphic.h"
 
-int main();
+int init(struct graphic_session *graphic);
 
+void update();
+
+#endif

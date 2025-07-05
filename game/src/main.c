@@ -1,7 +1,16 @@
 #include "system/logging.h"
+#include "system/graphic/graphic.h"
 #include "main.h"
 
-int main()
+static struct graphic_session *session;
+int init(struct graphic_session *created)
 {
-    LOG(" == ENTERED MAIN == ");
+    session = created;
+    return 0;
+}
+
+void update()
+{
+    if (session)
+        graphic_draw(session);
 }

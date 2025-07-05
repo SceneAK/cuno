@@ -5,17 +5,12 @@
 
 static struct graphic_session *session = NULL;
 
-void on_window_resized(struct android_app *app) 
-{
-    
-}
+void on_window_resized(struct android_app *app) { }
 
-static int window_initialized = 0;
 void on_init_window(struct android_app *app)
 {
     if (graphic_session_switch_window(session, app->window) != 0)
-        LOG("ERR: Switch window on resize failed");
-    window_initialized = 1;
+        LOG("ERR: Switch window failed");
 }
 
 void on_destroy()
@@ -29,6 +24,7 @@ void onAppCmd(struct android_app *app, int32_t cmd)
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
             on_init_window(app);
+            init(session);
             break;
         case APP_CMD_WINDOW_RESIZED:
             on_window_resized(app);
@@ -43,7 +39,6 @@ void android_main(struct android_app *app)
 {
     app->onAppCmd = onAppCmd;
     session = graphic_session_create();
-    main();
     while (!app->destroyRequested) {
         int events;
         struct android_poll_source *source;
@@ -51,7 +46,6 @@ void android_main(struct android_app *app)
             if (source) 
                 source->process(app, source);
         }
-        if (window_initialized)
-            graphic_gay_test(session);
+        update();
     }
 }
