@@ -3,6 +3,7 @@ set(SRC_DIR "${CMAKE_SOURCE_DIR}/game/src")
 add_library(game STATIC
     ${SRC_DIR}/main.c
     ${SRC_DIR}/system/graphic/egl.c
+    ${SRC_DIR}/system/graphic/matrix.c
 )
 find_library(GLES NAMES GLESv2 REQUIRED)
 find_library(EGL NAMES EGL REQUIRED)

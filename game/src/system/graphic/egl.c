@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <GLES2/gl2.h>
 #include "system/graphic/graphic.h"
+#include "system/graphic/matrix.h"
 #include "system/logging.h"
 
 struct graphic_session{
@@ -79,20 +80,29 @@ int graphic_session_destroy(struct graphic_session *session)
 
 const char* vertex_shader_src =
     "attribute vec4 aPosition;\n"
+    "uniform mat4 uModel;\n"
     "void main() {\n"
-    "    gl_Position = aPosition;\n"
+    "   \n"
+    "   gl_Position = uModel * aPosition;\n"
     "}\n";
 
 const char* fragment_shader_src =
     "precision mediump float;\n"
+    "uniform vec2 uResolution;\n"
     "void main() {\n"
-    "    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
+    "   float g_add = (gl_FragCoord.x * 2.0)/uResolution.x;\n"
+    "   float b_add = (gl_FragCoord.y * 2.0)/uResolution.y;\n"
+    "   gl_FragColor = vec4(cos(g_add), g_add, b_add, 1.0);\n"
     "}\n";
 
-GLfloat triangle[] = {
-     0.0f,  0.5f,
-    -0.5f, -0.5f,
-     0.5f, -0.5f
+GLfloat vertecies[] = {
+    -0.1f,  0.15f, 0.0f,
+    -0.1f, -0.15f, 0.0f,
+     0.1f, -0.15f, 0.0f,
+
+    -0.1f,  0.15f, 0.0f,
+     0.1f,  0.15f, 0.0f,
+     0.1f, -0.15f, 0.0f,
 };
 
 GLuint compile_shader(GLenum type, const char* source) {
@@ -136,33 +146,55 @@ GLuint create_program() {
 
 static GLuint program;
 static GLuint pos_attrib;
+static GLuint model_uni;
+static GLuint resolution_uni;
 static GLuint vbo;
-void glinit()
+static mat4 model;
+static float step = 0.0f;
+static vec3 scale = {2.0f, 2.0f, 2.0f};
+void glinit(struct graphic_session *session)
 {
     program = create_program();
     pos_attrib = glGetAttribLocation(program, "aPosition");
-    
+    model_uni = glGetUniformLocation(program, "uModel");
+    resolution_uni = glGetUniformLocation(program, "uResolution");
+
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertecies), vertecies, GL_STATIC_DRAW);
+
+    glUseProgram(program);
+
+    glEnableVertexAttribArray(pos_attrib);
+    glVertexAttribPointer(pos_attrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    EGLint width, height;
+    eglQuerySurface(session->display, session->surface, EGL_WIDTH, &width);
+    eglQuerySurface(session->display, session->surface, EGL_HEIGHT, &height);
+    glUniform2f(resolution_uni, width, height);
+    LOGF("WIDTH %d HEIGHT %d", width, height);
 }
+
+#include <math.h>
 void graphic_draw(struct graphic_session *session)
 {
+    vec3 pos = {0, sin(step/3)/3, sin(step/6)/4};
     if (!program)
-        glinit();
+        glinit(session);
 
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    step += 0.1f;
+    model = mat4_scale(scale);
+    model = mat4_mult(model, mat4_trans(pos));
+    model = mat4_mult(model, mat4_rotz(step));
+    model = mat4_mult(model, mat4_roty(step/3));
+    model = mat4_mult(model, mat4_rotx(step/9));
+    glUniformMatrix4fv(model_uni, 1, GL_TRUE, model.m[0]);
+
+    glClearColor(1.0f, 1.0f, 1.0f, 0.98f);
     glClear(GL_COLOR_BUFFER_BIT);
     
-    glUseProgram(program);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     
-    glEnableVertexAttribArray(pos_attrib);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glVertexAttribPointer(pos_attrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    
-    glDisableVertexAttribArray(pos_attrib);
     glFlush();
     eglSwapBuffers(session->display, session->surface);
 }
