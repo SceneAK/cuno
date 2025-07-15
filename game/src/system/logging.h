@@ -9,6 +9,7 @@
 #else
 #include <stdio.h>
 #define LOG(msg) printf(msg)
+#define LOGF(msg, ...) printf((msg), __VA_ARGS__)
 
 #endif
 
