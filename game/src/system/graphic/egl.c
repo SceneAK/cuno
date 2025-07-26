@@ -4,6 +4,7 @@
 #include "system/graphic/graphic.h"
 #include "system/graphic/matrix.h"
 #include "system/graphic/glutil.h"
+#include "system/graphic/glres.h"
 #include "system/logging.h"
 
 struct graphic_session{
@@ -13,18 +14,17 @@ struct graphic_session{
     EGLSurface  surface;
 };
 
-static EGLint const dpy_required_attr[] = {
+static const EGLint dpy_required_attr[] = {
     EGL_RED_SIZE, 1,
     EGL_GREEN_SIZE, 1,
     EGL_BLUE_SIZE, 1,
     EGL_NONE
 };
 
-static EGLint const ctx_required_attr[] = {
+static const EGLint ctx_required_attr[] = {
     EGL_CONTEXT_CLIENT_VERSION, 2,
     EGL_NONE
 };
-
 
 struct graphic_session *graphic_session_create()
 {
@@ -51,6 +51,27 @@ err:
     return NULL;
 }
 
+void on_graphic_ready();
+int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
+{
+    eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (session->surface != NULL)
+        eglDestroySurface(session->display, session->surface);
+
+    if (session->context == NULL)
+        session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
+
+    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
+    if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE) 
+        LOG("ERR: Failed to make context current");
+
+    if (session->surface == EGL_NO_SURFACE)
+        return -1;
+
+    on_graphic_ready();
+    return 0;
+}
+
 int graphic_session_destroy(struct graphic_session *session)
 {
     eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -60,109 +81,140 @@ int graphic_session_destroy(struct graphic_session *session)
     return 0;
 }
 
-const char* vertex_shader_src =
-    "attribute vec4 aPosition;\n"
-    "uniform mat4 uModel;\n"
-    "void main() {\n"
-    "   \n"
-    "   gl_Position = uModel * aPosition;\n"
-    "}\n";
-const char* fragment_shader_src =
-    "precision mediump float;\n"
-    "uniform vec2 uResolution;\n"
-    "void main() {\n"
-    "   float g_add = (gl_FragCoord.x * 2.0)/uResolution.x;\n"
-    "   float b_add = (gl_FragCoord.y * 2.0)/uResolution.y;\n"
-    "   gl_FragColor = vec4(cos(g_add), g_add, b_add, 1.0);\n"
-    "}\n";
-GLfloat vertecies[] = {
-    -0.1f,  0.15f, 0.0f,
-    -0.1f, -0.15f, 0.0f,
-     0.1f, -0.15f, 0.0f,
+/* END OF EGL. START OF GL */
 
-    -0.1f,  0.15f, 0.0f,
-     0.1f,  0.15f, 0.0f,
-     0.1f, -0.15f, 0.0f,
-};
+void graphic_clear(float r, float g, float b)
+{
+    glClearColor(r, g, b, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
 
-GLuint create_program() {
+void graphic_render(struct graphic_session *session)
+{
+    glFlush();
+    eglSwapBuffers(session->display, session->surface);
+}
+
+static GLuint default_program;
+static GLuint default_aPos;
+static GLuint default_aTexCoord;
+static GLuint default_uMVP;
+void create_program()
+{
     GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
     GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
 
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vertex_shader);
-    glAttachShader(program, fragment_shader);
-    glLinkProgram(program);
+    GLuint default_program = glCreateProgram();
+    glAttachShader(default_program, vertex_shader);
+    glAttachShader(default_program, fragment_shader);
+    glLinkProgram(default_program);
 
     GLint linked;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    glGetProgramiv(default_program, GL_LINK_STATUS, &linked);
     if (!linked) {
         char log[512];
-        glGetProgramInfoLog(program, sizeof(log), NULL, log);
+        glGetProgramInfoLog(default_program, sizeof(log), NULL, log);
         LOGF("Shader compile error: %s\n", log);
     }
 
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
-    return program;
+    default_aPos = glGetAttribLocation(default_program, "aPosition");
+    default_aTexCoord = glGetAttribLocation(default_program, "aTexCoord");
+    default_uMVP = glGetUniformLocation(default_program, "uMVP");
+    glUseProgram(default_program);
+}
+void on_graphic_ready()
+{
+    create_program();
 }
 
-static GLuint program;
-static GLuint pos_attrib;
-static GLuint model_uni;
-static GLuint resolution_uni;
-static GLuint vbo;
-
-void graphic_draw_init(struct graphic_session *session)
+struct graphic_font_ctx {
+    GLuint gl_tex;
+    float width, height;
+    unsigned int cp_len;
+    struct graphic_codepoint *cps;
+};
+struct graphic_font_ctx *graphic_font_ctx_create(float width, float height, char *bitmap,
+                                                        unsigned int cp_len, struct graphic_codepoint *cps)
 {
-    program = create_program();
-    pos_attrib = glGetAttribLocation(program, "aPosition");
-    model_uni = glGetUniformLocation(program, "uModel");
-    resolution_uni = glGetUniformLocation(program, "uResolution");
-    glUseProgram(program);
+    struct graphic_font_ctx *ctx = malloc(sizeof(struct graphic_font_ctx));
+    if(!ctx)
+        return NULL;
 
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertecies), vertecies, GL_STATIC_DRAW);
+    ctx->width = width;
+    ctx->height = height;
+    glGenTextures(1, &ctx->gl_tex);
+    glBindTexture(GL_TEXTURE_2D, ctx->gl_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, bitmap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glEnableVertexAttribArray(pos_attrib);
-    glVertexAttribPointer(pos_attrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    ctx->cp_len = cp_len;
+    ctx->cps = cps;
 
-    EGLint width, height;
-    eglQuerySurface(session->display, session->surface, EGL_WIDTH, &width);
-    eglQuerySurface(session->display, session->surface, EGL_HEIGHT, &height);
-    glUniform2f(resolution_uni, width, height);
+    return ctx;
 }
 
-int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
+struct graphic_text_ctx {
+    GLint vert_vbo;
+};
+struct graphic_text_ctx *graphic_text_ctx_create(struct graphic_font_ctx *font_ctx, const char *text)
 {
-    eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    if (session->surface != NULL)
-        eglDestroySurface(session->display, session->surface);
+    struct graphic_text_ctx *ctx = malloc(sizeof(struct graphic_text_ctx));    
+    struct graphic_codepoint cp;
+    float cp_width, cp_height, x = 0;
 
-    if (session->context != NULL)
-        eglDestroyContext(session->display, session->context);
+    GLfloat verts[18];
 
-    session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
-    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
-    if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE) 
-        LOG("ERR: Failed to make context current");
+    for (const char *c = text; *c; c++) {
+        cp = font_ctx->cps[*c - 32];
+        cp_width = cp.x1 - cp.x0;
+        cp_height = cp.y1 - cp.y0;
 
-    if (session->surface == EGL_NO_SURFACE)
-        return -1;
-    graphic_draw_init(session);
-    return 0;
+        construct_3D_quad(verts, x, 0, x + cp_width, cp_height);
+        
+        /* Texture coordinates
+         *
+         * add tex coords to verts
+         * add it to the vbo
+         * 
+         * */
+
+        x += cp.xadv;
+    }
+    return ctx;
 }
 
-void graphic_draw_default(struct graphic_session *session, mat4 model)
+struct graphic_draw_ctx {
+    GLuint vbo;
+    size_t vert_count;
+};
+struct graphic_draw_ctx *graphic_draw_ctx_create(const float *verts, size_t vert_count)
 {
-    glUniformMatrix4fv(model_uni, 1, GL_TRUE, model.m[0]);
+    struct graphic_draw_ctx *ctx = malloc(sizeof(struct graphic_draw_ctx));
+    if(!ctx)
+        return NULL;
 
-    glClearColor(1.0f, 1.0f, 1.0f, 0.98f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    
-    glFlush();
-    eglSwapBuffers(session->display, session->surface);
+    ctx->vert_count = vert_count;
+
+    glGenBuffers(1, &ctx->vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * (5*vert_count), verts, GL_STATIC_DRAW);
+
+    return ctx;
+}
+
+void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp)
+{
+    glBindBuffer(GL_ARRAY_BUFFER, ctx->vbo);
+
+    glVertexAttribPointer(default_aPos, 3, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (void*)0);
+    glEnableVertexAttribArray(default_aPos);
+
+    glVertexAttribPointer(default_aTexCoord, 2, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (void*)(3*sizeof(GLfloat)));
+    glEnableVertexAttribArray(default_aTexCoord);
+
+    glUniformMatrix4fv(default_uMVP, 1, GL_TRUE, mvp.m[0]);
+    glDrawArrays(GL_TRIANGLES, 0, ctx->vert_count);
 }
