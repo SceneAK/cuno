@@ -28,7 +28,7 @@ int load_ascii_font(struct baked_font *font)
 
     ttf = asset_open(ASSET_PATH_FONT);
     asset_read(ttf_buffer, 1<<19, ttf);
-    *font = create_ascii_baked_font(ttf);
+    *font = create_ascii_baked_font(ttf_buffer);
     asset_close(ttf);
     return 1;
 }
@@ -79,18 +79,19 @@ static float step_card;
 static float step_triangle;
 void render()
 {
-    vec3 text_scale = {1.0/100000, 1.0/100000, 1};
+    vec3 text_scale = {0.002, 0.002, 1};
+    vec3 text_trans = {-3, 0, 0};
 
     mat4 model_card = oscillate_model(step_card);
     mat4 model_triangle = oscillate_model(step_triangle);
     mat4 model_text = mat4_scale(text_scale);
+    model_text = mat4_mult(model_text, mat4_trans(text_trans));
 
     graphic_clear(1, 1, 1);
 
     graphic_draw(ctx_card, model_card);
     graphic_draw(ctx_triangle, model_triangle);
-    if (ctx_text)
-        graphic_draw(ctx_text, model_text);
+    graphic_draw(ctx_text, model_text);
 
     graphic_render(session);
 
@@ -100,7 +101,6 @@ void render()
 
 void update()
 {
-    /* I expect to have control over position, textures, model, etc */
     if (session)
         render();
 }

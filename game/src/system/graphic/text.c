@@ -15,7 +15,6 @@ void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len
         
         cps[i].xoff = bakedchr[i].xoff; cps[i].yoff = bakedchr[i].yoff;
         cps[i].xadv = bakedchr[i].xadvance;
-        LOGF("bakedchr[%i]: xadv %f, x0 %d", i, bakedchr[i].xadvance, bakedchr[i].x0);
     }
 }
 
@@ -32,8 +31,7 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf)
 
     cps = malloc(sizeof(struct codepoint) * 96);
 
-    if (stbtt_BakeFontBitmap(ttf, 0, 32.0, font.bitmap, font.width, font.height, 32, 96, cdata) != 0)
-        LOG("Failed to bake font");
+    stbtt_BakeFontBitmap(ttf, 0, 32.0, font.bitmap, font.width, font.height, 32, 96, cdata);
 
     convert_to_cps(cps, cdata, 96); 
     font.cps = cps;
@@ -52,7 +50,7 @@ void construct_3D_quad(float *verts, rect2D dimension, rect2D tex)
      verts[5]  = dimension.x1; verts[6]  = dimension.y0; verts[7]  = 0.0f; verts[8]  = tex.x1; verts[9]  = tex.y0;
      verts[10] = dimension.x0; verts[11] = dimension.y1; verts[12] = 0.0f; verts[13] = tex.x0; verts[14] = tex.y1;
 
-    verts[15]  = dimension.x1; verts[16] = dimension.x1; verts[17] = 0.0f; verts[18] = tex.x1; verts[19] = tex.x1;
+    verts[15]  = dimension.x1; verts[16] = dimension.y1; verts[17] = 0.0f; verts[18] = tex.x1; verts[19] = tex.y1;
      verts[20] = dimension.x1; verts[21] = dimension.y0; verts[22] = 0.0f; verts[23] = tex.x1; verts[24] = tex.y0;
      verts[25] = dimension.x0; verts[26] = dimension.y1; verts[27] = 0.0f; verts[28] = tex.x0; verts[29] = tex.y1;
 }
@@ -77,10 +75,10 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, const char 
         cp_width = cp.x1 - cp.x0;
         cp_height = cp.y1 - cp.y0;
 
-        dimension.x0 = x_head;
-        dimension.y0 = 0;
-        dimension.x1 = x_head + cp_width;
-        dimension.y1 = cp_height;
+        dimension.x0 =  cp.xoff + x_head;
+        dimension.y0 = -cp.yoff;
+        dimension.x1 =  cp.xoff + cp_width + x_head;
+        dimension.y1 = -cp.yoff - cp_height;
 
         tex.x0 = cp.x0 / font.width;
         tex.y0 = cp.y0 / font.height;

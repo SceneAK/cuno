@@ -128,6 +128,9 @@ void create_program()
     default_uUseTexture = glGetUniformLocation(default_program, "uUseTexture");
     default_uTexture = glGetUniformLocation(default_program, "uTexture");
     glUseProgram(default_program);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 void on_graphic_ready()
 {
@@ -140,18 +143,20 @@ struct graphic_texture {
 };
 struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap)
 {
-    struct graphic_texture *gtex = malloc(sizeof(struct graphic_texture));
-    if (!gtex)
+    struct graphic_texture *texture = malloc(sizeof(struct graphic_texture));
+    if (!texture)
         return NULL;
 
-    gtex->width = width;
-    gtex->height = height;
-    glGenTextures(1, &gtex->gltex);
+    texture->width = width;
+    texture->height = height;
+    glGenTextures(1, &texture->gltex);
+    glBindTexture(GL_TEXTURE_2D, texture->gltex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, width, height, 0, GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    return gtex;
+    return texture;
 }
 void graphic_texture_destroy(struct graphic_texture *texture)
 {
@@ -188,8 +193,8 @@ void graphic_draw_ctx_destroy(struct graphic_draw_ctx *ctx)
     free(ctx);
 }
 
-static GLuint bound_vbo;
-static GLuint bound_tex2D;
+static GLuint bound_vbo = -1;
+static GLuint bound_tex2D = -1;
 void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp)
 {
     if (bound_vbo != ctx->glvbo) {
@@ -209,7 +214,7 @@ void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp)
             glBindTexture(GL_TEXTURE_2D, ctx->texture->gltex);
             bound_tex2D = ctx->texture->gltex;
         }
-        /* glUniform1i(default_uTexture, 0); */
+        glUniform1i(default_uTexture, 0);
     }
     glUniform1i(default_uUseTexture, ctx->texture != NULL);
 
