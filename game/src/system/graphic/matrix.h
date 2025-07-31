@@ -7,6 +7,8 @@ typedef struct { float x, y, z; } vec3;
 #define VEC4_ZERO { 0, 0, 0, 0 };
 #define PI 3.141592653589793
 
+mat4 mat4_identity();
+
 mat4 mat4_scale(vec3 vec);
 
 mat4 mat4_trans(vec3 vec);

@@ -12,6 +12,7 @@ add_custom_command(
     COMMAND aapt2 link "${COMPILED}"
             -o "${UNSIGNED}"
 	    -I "$ENV{ANDROID_SDK_ROOT}/platforms/${ANDROID_PLATFORM}/android.jar"
+        -A "${OUTPUT_APP_DIR}/assets"
 	    --manifest "${OUTPUT_APP_DIR}/AndroidManifest.xml"
     COMMAND cd "${OUTPUT_APP_DIR}" && zip -r "${UNSIGNED}" lib/
     DEPENDS COMPILED

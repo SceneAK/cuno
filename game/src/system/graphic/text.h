@@ -1,0 +1,24 @@
+#ifndef TEXT_H
+#define TEXT_H
+#include <stddef.h>
+#include "system/graphic/graphic.h"
+
+struct codepoint {
+    float x0, y0, x1, y1, xoff, yoff, xadv;
+};
+struct baked_font {
+    unsigned char       *bitmap;
+    float                width;
+    float                height;
+
+    struct codepoint    *cps;
+    size_t               cps_len;
+};
+
+struct baked_font create_ascii_baked_font(unsigned char *ttf);
+
+float *create_text_verts(struct baked_font font, size_t *vert_count, const char *text);
+
+struct graphic_draw_ctx *graphic_draw_ctx_create_text(struct baked_font font, struct graphic_texture *font_tex, const char *text);
+
+#endif

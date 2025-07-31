@@ -1,9 +1,11 @@
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/game/src")
+set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/game/assets")
 
 add_library(game STATIC
     ${SRC_DIR}/main.c
     ${SRC_DIR}/system/graphic/egl.c
     ${SRC_DIR}/system/graphic/matrix.c
+    ${SRC_DIR}/system/graphic/text.c
 #   ${SRC_DIR}/external/stb_truetype.h
 )
 

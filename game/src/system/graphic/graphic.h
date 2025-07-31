@@ -3,6 +3,9 @@
 #include "system/graphic/matrix.h"
 #include <stddef.h>
 
+#define VERT_NUM_OF_ELEMENTS 5
+#define VERT_SIZE (VERT_NUM_OF_ELEMENTS*sizeof(float))
+
 struct graphic_session;
 
 struct graphic_session *graphic_session_create();
@@ -14,18 +17,13 @@ int graphic_session_destroy(struct graphic_session *session);
 struct graphic_session *graphic_session_create();
 
 
-
 struct graphic_draw_ctx;
 
-struct graphic_codepoint {
-    float xadv, xoff, yoff, x0, y0, x1, y1;
-};
-struct graphic_font_ctx;
+struct graphic_texture;
 
-struct graphic_font_ctx *graphic_font_ctx_create(float width, float height, char *bitmap,
-                                                        unsigned int cp_len, struct graphic_codepoint *cps);
+struct graphic_draw_ctx *graphic_draw_ctx_create(const float *verts, size_t vert_count, struct graphic_texture *texture);
 
-struct graphic_draw_ctx *graphic_draw_ctx_create(const float *verts, size_t len);
+struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap);
 
 void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp);
 

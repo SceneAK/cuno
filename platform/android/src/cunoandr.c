@@ -1,11 +1,13 @@
 #include <android_native_app_glue.h>
-#include "main.h"
 #include "system/graphic/graphic.h"
 #include "system/logging.h"
+#include "main.h"
+
+#include "asset_management_andr.h"
 
 static struct graphic_session *session = NULL;
 
-void on_window_resized(struct android_app *app) { }
+void on_window_resized(struct android_app *app) {   }
 
 void on_init_window(struct android_app *app)
 {
@@ -37,6 +39,9 @@ void onAppCmd(struct android_app *app, int32_t cmd)
 
 void android_main(struct android_app *app) 
 {
+    AAssetManager* asset_mngr = app->activity->assetManager;
+    asset_management_init(asset_mngr);
+
     app->onAppCmd = onAppCmd;
     session = graphic_session_create();
     while (!app->destroyRequested) {

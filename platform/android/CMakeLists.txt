@@ -7,14 +7,18 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/app
             ${OUTPUT_APP_DIR}
-	    COMMAND ${CMAKE_COMMAND} -E touch ${COPY_STAMP}
+
+	COMMAND ${CMAKE_COMMAND} -E touch ${COPY_STAMP}
     COMMENT "Copying app to build directory"
 )
 add_custom_target(outputdir DEPENDS ${COPY_STAMP})
 
 # Cuno Shared Library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_APP_DIR}/lib/${ANDROID_ABI})
-add_library(cuno SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c)
+add_library(cuno SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset_management_andr.c
+)
 add_dependencies(cuno outputdir)
 
 # Android Glue Object Compile

@@ -1,6 +1,17 @@
 #include "matrix.h"
 #include <math.h>
 
+mat4 mat4_identity()
+{
+    mat4 ident = { {
+        { 1, 0, 0, 0 },
+        { 0, 1, 0, 0 },
+        { 0, 0, 1, 0 },
+        { 0, 0, 0, 1 },
+    } };
+    return ident;
+}
+
 mat4 mat4_scale(vec3 vec)
 {
     mat4 result = { {
