@@ -126,7 +126,7 @@ void create_program()
     default_aTexCoord   = glGetAttribLocation(default_program, "aTexCoord");
     default_uMVP        = glGetUniformLocation(default_program, "uMVP");
     default_uUseTexture = glGetUniformLocation(default_program, "uUseTexture");
-    default_uTexture = glGetUniformLocation(default_program, "uTexture");
+    default_uTexture    = glGetUniformLocation(default_program, "uTexture");
     glUseProgram(default_program);
 
     glEnable(GL_BLEND);

@@ -79,7 +79,7 @@ mat4 mat4_rotz(float rad)
     return result;
 }
 
-/* Row-Major */
+/* Row-Major. */
 mat4 mat4_mult(mat4 a, mat4 b) 
 {
     mat4 result;
