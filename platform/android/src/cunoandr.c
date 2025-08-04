@@ -44,7 +44,7 @@ int on_mouse_input(struct android_app *app, AInputEvent *event)
     int32_t             buttons, action;
 
     mevent.mouse_x = AMotionEvent_getX(event, 0);
-    mevent.mouse_x = AMotionEvent_getY(event, 0);
+    mevent.mouse_y = AMotionEvent_getY(event, 0);
     mevent.state = MOUSE_HOVER;
 
     buttons = AMotionEvent_getButtonState(event);

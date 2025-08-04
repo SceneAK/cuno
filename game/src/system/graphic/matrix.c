@@ -1,6 +1,14 @@
 #include "matrix.h"
 #include <math.h>
 
+/* VECTORS */
+vec3 vec3_create(float x, float y, float z)
+{ 
+    vec3 val = {x, y, z};
+    return val;
+}
+
+/* MATRICES */
 mat4 mat4_identity()
 {
     mat4 ident = { {
@@ -92,4 +100,23 @@ mat4 mat4_mult(mat4 a, mat4 b)
         }
     }
     return result;
+}
+
+/* MATRIX UTILS */
+
+mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale)
+{
+    mat4 model = mat4_scale(scale);
+
+    if (rot.x)
+        model = mat4_mult(mat4_rotx(rot.x), model);
+    if (rot.y)
+        model = mat4_mult(mat4_roty(rot.x), model);
+    if (rot.z)
+        model = mat4_mult(mat4_rotz(rot.z), model);
+
+    if (trans.x || trans.y || trans.z)
+        model = mat4_mult(mat4_trans(trans), model);
+
+    return model;
 }

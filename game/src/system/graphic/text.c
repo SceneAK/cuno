@@ -93,15 +93,15 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, const char 
     return vert_data;
 }
 
-struct graphic_draw_ctx *graphic_draw_ctx_create_text(struct baked_font font, struct graphic_texture *font_tex, const char *text)
+struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, const char *text)
 {
-    struct graphic_draw_ctx *ctx;
+    struct graphic_vertecies *graphic_verts;
     size_t                   vert_count;
     float                   *verts;
 
     verts = create_text_verts(font, &vert_count, text);
-    ctx = graphic_draw_ctx_create(verts, vert_count, font_tex);
+    graphic_verts = graphic_vertecies_create(verts, vert_count);
     free(verts);
-    return ctx;
+    return graphic_verts;
 }
 

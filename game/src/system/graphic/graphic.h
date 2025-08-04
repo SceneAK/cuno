@@ -17,15 +17,19 @@ int graphic_session_destroy(struct graphic_session *session);
 struct graphic_session *graphic_session_create();
 
 
-struct graphic_draw_ctx;
+struct graphic_vertecies;
 
 struct graphic_texture;
 
-struct graphic_draw_ctx *graphic_draw_ctx_create(const float *verts, size_t vert_count, struct graphic_texture *texture);
-
 struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap);
 
-void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp);
+void graphic_texture_destroy(struct graphic_texture *texture);
+
+struct graphic_vertecies *graphic_vertecies_create(const float *verts, size_t vert_count);
+
+void graphic_vertecies_destroy(struct graphic_vertecies *ctx);
+
+void graphic_draw(struct graphic_vertecies *ctx, struct graphic_texture *tex, mat4 mvp);
 
 void graphic_clear(float r, float g, float b);
 

@@ -164,42 +164,40 @@ void graphic_texture_destroy(struct graphic_texture *texture)
     free(texture);
 }
 
-struct graphic_draw_ctx {
+struct graphic_vertecies {
     GLuint                  glvbo;
     size_t                  vert_count;
-    struct graphic_texture *texture;
 };
-struct graphic_draw_ctx *graphic_draw_ctx_create(const float *verts, size_t vert_count, struct graphic_texture *texture)
+struct graphic_vertecies *graphic_vertecies_create(const float *verts, size_t vert_count)
 {
-    struct graphic_draw_ctx *ctx = malloc(sizeof(struct graphic_draw_ctx));
-    if (!ctx)
+    struct graphic_vertecies *vertecies = malloc(sizeof(struct graphic_vertecies));
+    if (!vertecies)
         return NULL;
 
-    ctx->vert_count = vert_count;
-    ctx->texture = texture;
+    vertecies->vert_count = vert_count;
 
-    glGenBuffers(1, &ctx->glvbo);
-    glBindBuffer(GL_ARRAY_BUFFER, ctx->glvbo);
+    glGenBuffers(1, &vertecies->glvbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vertecies->glvbo);
     glBufferData(GL_ARRAY_BUFFER, VERT_SIZE*(vert_count), verts, GL_STATIC_DRAW);
 
-    return ctx;
+    return vertecies;
 }
-void graphic_draw_ctx_destroy(struct graphic_draw_ctx *ctx)
+void graphic_vertecies_destroy(struct graphic_vertecies *vertecies)
 {
-    if (ctx->texture)
-        graphic_texture_destroy(ctx->texture);
-
-    glDeleteBuffers(1, &ctx->glvbo);
-    free(ctx);
+    glDeleteBuffers(1, &vertecies->glvbo);
+    free(vertecies);
 }
 
 static GLuint bound_vbo = -1;
 static GLuint bound_tex2D = -1;
-void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp)
+void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *texture, mat4 mvp)
 {
-    if (bound_vbo != ctx->glvbo) {
-        glBindBuffer(GL_ARRAY_BUFFER, ctx->glvbo);
-        bound_vbo = ctx->glvbo;
+    if (!vertecies)
+        return;
+
+    if (bound_vbo != vertecies->glvbo) {
+        glBindBuffer(GL_ARRAY_BUFFER, vertecies->glvbo);
+        bound_vbo = vertecies->glvbo;
     
         glVertexAttribPointer(default_aPos, 3, GL_FLOAT, GL_FALSE, VERT_SIZE, (void*)0);
         glEnableVertexAttribArray(default_aPos);
@@ -208,17 +206,17 @@ void graphic_draw(struct graphic_draw_ctx *ctx, mat4 mvp)
         glEnableVertexAttribArray(default_aTexCoord);
     }
 
-    if (ctx->texture) {
-        if (bound_tex2D != ctx->texture->gltex) {
+    if (texture) {
+        if (bound_tex2D != texture->gltex) {
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, ctx->texture->gltex);
-            bound_tex2D = ctx->texture->gltex;
+            glBindTexture(GL_TEXTURE_2D, texture->gltex);
+            bound_tex2D = texture->gltex;
         }
         glUniform1i(default_uTexture, 0);
     }
-    glUniform1i(default_uUseTexture, ctx->texture != NULL);
+    glUniform1i(default_uUseTexture, texture != NULL);
 
     glUniformMatrix4fv(default_uMVP, 1, GL_TRUE, mvp.m[0]);
 
-    glDrawArrays(GL_TRIANGLES, 0, ctx->vert_count);
+    glDrawArrays(GL_TRIANGLES, 0, vertecies->vert_count);
 }

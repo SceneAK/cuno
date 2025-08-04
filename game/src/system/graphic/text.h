@@ -19,6 +19,6 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf);
 
 float *create_text_verts(struct baked_font font, size_t *vert_count, const char *text);
 
-struct graphic_draw_ctx *graphic_draw_ctx_create_text(struct baked_font font, struct graphic_texture *font_tex, const char *text);
+struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, const char *text);
 
 #endif
