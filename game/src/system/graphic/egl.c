@@ -2,6 +2,7 @@
 #include <EGL/egl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "system/graphic/graphic.h"
 #include "system/graphic/matrix.h"
 #include "system/graphic/glutil.h"
@@ -27,6 +28,23 @@ static const EGLint ctx_required_attr[] = {
     EGL_NONE
 };
 
+const char* egl_err_to_str(EGLint err)
+{
+    switch(err) {
+        case EGL_SUCCESS: return "EGL_SUCCESS";
+        case EGL_NOT_INITIALIZED: return "EGL_NOT_INITIALIZED";
+        case EGL_BAD_ACCESS: return "EGL_BAD_ACCESS";
+        case EGL_BAD_ALLOC: return "EGL_BAD_ALLOC";
+        case EGL_BAD_ATTRIBUTE: return "EGL_BAD_ATTRIBUTE";
+        case EGL_BAD_CONFIG: return "EGL_BAD_CONFIG";
+        case EGL_BAD_CONTEXT: return "EGL_BAD_CONTEXT";
+        case EGL_BAD_CURRENT_SURFACE: return "EGL_BAD_CURRENT_SURFACE";
+        case EGL_BAD_DISPLAY: return "EGL_BAD_DISPLAY";
+        case EGL_BAD_MATCH: return "EGL_BAD_MATCH";
+        default: return "UNKNOWN";
+    }
+}
+
 struct graphic_session *graphic_session_create()
 {
     EGLint num_config;
@@ -48,29 +66,9 @@ struct graphic_session *graphic_session_create()
     return session;
 
 err:
+    LOG(egl_err_to_str(eglGetError()));
     free(session);
     return NULL;
-}
-
-void on_graphic_ready();
-int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
-{
-    eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    if (session->surface != NULL)
-        eglDestroySurface(session->display, session->surface);
-
-    if (session->context == NULL)
-        session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
-
-    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
-    if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE) 
-        LOG("ERR: Failed to make context current");
-
-    if (session->surface == EGL_NO_SURFACE)
-        return -1;
-
-    on_graphic_ready();
-    return 0;
 }
 
 int graphic_session_destroy(struct graphic_session *session)
@@ -81,6 +79,36 @@ int graphic_session_destroy(struct graphic_session *session)
     eglTerminate(session->display);
     return 0;
 }
+
+void on_graphic_ready();
+int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
+{
+    eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (session->surface != NULL)
+        eglDestroySurface(session->display, session->surface);
+
+    eglBindAPI(EGL_OPENGL_ES_API);
+    if (session->context == NULL)
+        session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
+
+    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
+    if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE)  {
+        LOG("ERR: Failed to make context current");
+        return -1;
+    }
+
+    on_graphic_ready();
+    return 0;
+}
+
+struct graphic_session_info graphic_session_info_get(struct graphic_session *session)
+{
+    struct graphic_session_info info;
+    eglQuerySurface(session->display, session->surface, EGL_WIDTH, &info.width);
+    eglQuerySurface(session->display, session->surface, EGL_HEIGHT, &info.height); 
+    return info;
+}
+
 
 /* END OF EGL. START OF GL */
 
@@ -220,3 +248,28 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
 
     glDrawArrays(GL_TRIANGLES, 0, vertecies->vert_count);
 }
+
+/* Utils */
+mat4 mat4_perspective(float fov_y, float aspect, float near)
+{
+    float f = 1/tan(fov_y/2);
+    mat4 result = {{
+        { f/aspect, 0, 0, 0 },
+        { 0, f, 0, 0 },
+        { 0, 0, -1, -2 * near },
+        { 0, 0, -1, 0 }
+    }};
+    return result;
+}
+/* Assumes 30 elements allocated */
+void construct_3D_quad(float *verts, rect2D dimension, rect2D tex) 
+{
+    verts[0]   = dimension.x0; verts[1]  = dimension.y0; verts[2]  = 0.0f; verts[3]  = tex.x0; verts[4]  = tex.y0;
+     verts[5]  = dimension.x1; verts[6]  = dimension.y0; verts[7]  = 0.0f; verts[8]  = tex.x1; verts[9]  = tex.y0;
+     verts[10] = dimension.x0; verts[11] = dimension.y1; verts[12] = 0.0f; verts[13] = tex.x0; verts[14] = tex.y1;
+
+    verts[15]  = dimension.x1; verts[16] = dimension.y1; verts[17] = 0.0f; verts[18] = tex.x1; verts[19] = tex.y1;
+     verts[20] = dimension.x1; verts[21] = dimension.y0; verts[22] = 0.0f; verts[23] = tex.x1; verts[24] = tex.y0;
+     verts[25] = dimension.x0; verts[26] = dimension.y1; verts[27] = 0.0f; verts[28] = tex.x0; verts[29] = tex.y1;
+}
+

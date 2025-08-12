@@ -39,22 +39,6 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf)
     return font;
 }
 
-typedef struct {
-    float x0; float y0; 
-    float x1; float y1;
-} rect2D;
-/* Assumes 30 elements allocated */
-void construct_3D_quad(float *verts, rect2D dimension, rect2D tex) 
-{
-    verts[0]   = dimension.x0; verts[1]  = dimension.y0; verts[2]  = 0.0f; verts[3]  = tex.x0; verts[4]  = tex.y0;
-     verts[5]  = dimension.x1; verts[6]  = dimension.y0; verts[7]  = 0.0f; verts[8]  = tex.x1; verts[9]  = tex.y0;
-     verts[10] = dimension.x0; verts[11] = dimension.y1; verts[12] = 0.0f; verts[13] = tex.x0; verts[14] = tex.y1;
-
-    verts[15]  = dimension.x1; verts[16] = dimension.y1; verts[17] = 0.0f; verts[18] = tex.x1; verts[19] = tex.y1;
-     verts[20] = dimension.x1; verts[21] = dimension.y0; verts[22] = 0.0f; verts[23] = tex.x1; verts[24] = tex.y0;
-     verts[25] = dimension.x0; verts[26] = dimension.y1; verts[27] = 0.0f; verts[28] = tex.x0; verts[29] = tex.y1;
-}
-
 float *create_text_verts(struct baked_font font, size_t *vert_count, const char *text)
 {
     struct codepoint    cp;
