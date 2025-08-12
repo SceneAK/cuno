@@ -86,12 +86,12 @@ int graphic_session_reset_window(struct graphic_session *session, void *native_w
     eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     if (session->surface != NULL)
         eglDestroySurface(session->display, session->surface);
+    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
 
     eglBindAPI(EGL_OPENGL_ES_API);
     if (session->context == NULL)
         session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
 
-    session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
     if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE)  {
         LOG("ERR: Failed to make context current");
         return -1;

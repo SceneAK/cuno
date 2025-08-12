@@ -11,6 +11,8 @@ void on_window_resized(struct android_app *app) {   }
 
 void on_init_window(struct android_app *app)
 {
+    if (!session)
+        session = graphic_session_create();
     if (graphic_session_reset_window(session, app->window) != 0)
         LOG("ERR: Switch window failed");
 }
@@ -80,7 +82,6 @@ void android_main(struct android_app *app)
     app->onAppCmd = on_app_cmd;
     app->onInputEvent = on_input;
 
-    session = graphic_session_create();
     while (!app->destroyRequested) {
         int32_t events;
         struct android_poll_source *source;
