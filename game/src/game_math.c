@@ -1,5 +1,5 @@
 #include "system/logging.h"
-#include "matrix.h"
+#include "game_math.h"
 #include <math.h>
 
 /* VECTORS */

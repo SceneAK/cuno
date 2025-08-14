@@ -1,9 +1,11 @@
-#ifndef MATRIX_H
-#define MATRIX_H
+#ifndef MATH_H
+#define MATH_H
 #define PI 3.141592653589793
 #define DEG_TO_RAD(deg) (deg * PI/180)
 
 typedef struct { float m[4][4]; } mat4;
+
+typedef struct { float x, y; } vec2;
 typedef struct { float x, y, z; } vec3;
 
 /* VECTORS */
@@ -23,7 +25,7 @@ mat4 mat4_rotx(float rad);
 mat4 mat4_roty(float rad);
 mat4 mat4_rotz(float rad);
 
-mat4 mat4_mult(mat4 a, mat4 b);
+mat4 mat4_mult(mat4 a, mat4 b); /* Chains nicely at the cost of copying mat4s */
 
 mat4 mat4_invert(mat4 mat);
 

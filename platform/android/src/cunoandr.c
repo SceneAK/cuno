@@ -1,4 +1,5 @@
 #include <android_native_app_glue.h>
+#include <stdlib.h>
 #include "system/graphic/graphic.h"
 #include "system/logging.h"
 #include "main.h"
@@ -9,12 +10,16 @@ static struct graphic_session *session = NULL;
 
 void on_window_resized(struct android_app *app) {   }
 
-void on_init_window(struct android_app *app)
+int on_init_window(struct android_app *app)
 {
     if (!session)
         session = graphic_session_create();
-    if (graphic_session_reset_window(session, app->window) != 0)
+
+    if (graphic_session_reset_window(session, app->window) != 0) {
         LOG("ERR: Switch window failed");
+        return -1;
+    }
+    return 0;
 }
 
 void on_destroy()
@@ -27,7 +32,8 @@ void on_app_cmd(struct android_app *app, int32_t cmd)
 {
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
-            on_init_window(app);
+            if (on_init_window(app) != 0)
+                exit(EXIT_FAILURE);
             game_init(session);
             break;
         case APP_CMD_WINDOW_RESIZED:
@@ -47,18 +53,18 @@ int on_mouse_input(struct android_app *app, AInputEvent *event)
 
     mevent.mouse_x = AMotionEvent_getX(event, 0);
     mevent.mouse_y = AMotionEvent_getY(event, 0);
-    mevent.state = MOUSE_HOVER;
+    mevent.type = MOUSE_HOVER;
 
     buttons = AMotionEvent_getButtonState(event);
     action  = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
 
     if (buttons & AMOTION_EVENT_BUTTON_PRIMARY)
-        mevent.state = MOUSE_HOLD;
+        mevent.type = MOUSE_HOLD;
 
     if (action == AMOTION_EVENT_ACTION_DOWN)
-        mevent.state = MOUSE_DOWN;
+        mevent.type = MOUSE_DOWN;
     else if (action == AMOTION_EVENT_ACTION_UP)
-        mevent.state = MOUSE_UP;
+        mevent.type = MOUSE_UP;
 
     game_mouse_event(mevent);
     return 1;
@@ -74,7 +80,7 @@ int on_input(struct android_app *app, AInputEvent *event)
 }
 
 void android_main(struct android_app *app) 
-{
+{LOG("ENTERED ANDROID MAIN");
     AAssetManager*      asset_mngr = app->activity->assetManager;
 
     asset_management_init(asset_mngr);

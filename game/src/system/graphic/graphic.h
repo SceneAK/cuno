@@ -1,6 +1,6 @@
 #ifndef GRAPHIC_H
 #define GRAPHIC_H
-#include "system/graphic/matrix.h"
+#include "game_math.h"
 #include <stddef.h>
 
 #define VERT_NUM_OF_ELEMENTS 5

@@ -2,14 +2,14 @@
 #define MAIN_H
 #include "system/graphic/graphic.h"
 
-enum mouse_state {
+enum mouse_event_type {
     MOUSE_HOLD,
     MOUSE_HOVER,
     MOUSE_DOWN,
     MOUSE_UP
 };
 struct mouse_event {
-    enum mouse_state state;
+    enum mouse_event_type type;
     float mouse_x, mouse_y;
 };
 

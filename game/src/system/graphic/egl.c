@@ -4,10 +4,10 @@
 #include <string.h>
 #include <math.h>
 #include "system/graphic/graphic.h"
-#include "system/graphic/matrix.h"
 #include "system/graphic/glutil.h"
 #include "system/graphic/glres.h"
 #include "system/logging.h"
+#include "game_math.h"
 
 struct graphic_session {
     EGLDisplay  display;
