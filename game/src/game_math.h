@@ -9,9 +9,10 @@ typedef struct { float x, y; } vec2;
 typedef struct { float x, y, z; } vec3;
 
 /* VECTORS */
+vec2 vec2_create(float x, float y);
 vec3 vec3_create(float x, float y, float z);
 
-vec3 vec3_mult_mat4(mat4 mat, vec3 vec);
+vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w);
 
 /* MATRIX */
 /* Expected Row-Major */

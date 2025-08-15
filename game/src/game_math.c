@@ -3,23 +3,29 @@
 #include <math.h>
 
 /* VECTORS */
+vec2 vec2_create(float x, float y)
+{ 
+    vec2 val = {x, y};
+    return val;
+}
+
 vec3 vec3_create(float x, float y, float z)
 { 
     vec3 val = {x, y, z};
     return val;
 }
 
-vec3 vec3_mult_mat4(mat4 mat, vec3 vec)
+vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
 {
     vec3 result;
     int col;
 
     col = 0;
-    result.x = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z);
+    result.x = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
     col = 1;
-    result.y = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z);
+    result.y = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
     col = 2;
-    result.z = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z);
+    result.z = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
 
     return result;
 }
@@ -182,7 +188,7 @@ mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale)
     if (rot.x)
         model = mat4_mult(mat4_rotx(rot.x), model);
     if (rot.y)
-        model = mat4_mult(mat4_roty(rot.x), model);
+        model = mat4_mult(mat4_roty(rot.y), model);
     if (rot.z)
         model = mat4_mult(mat4_rotz(rot.z), model);
 

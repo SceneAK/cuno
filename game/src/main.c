@@ -21,9 +21,10 @@ static const float NEAR = 0.2f;
 static const float FOV_DEG = 90;
 
 /* OBJECTS */
+static struct object cursor;
 static struct object card;
-static struct object static_card;
-static struct object triangle;
+
+static struct object ortho_test;
 static struct object text[3];
 
 void init_objects()
@@ -47,40 +48,28 @@ void init_objects()
     };
     card.id = 0;
     card.vertecies = graphic_vertecies_create(card_verts, 6);
-    card.rot = vec3_create(0, 0, 0);
-    card.scale = vec3_create(1, 1, 1);
-    card.click_bounds = card_bounds;
+    card.trans = vec3_create(0, 0, -10);
+    card.scale = vec3_create(2.2, 2.2, 2.2);
+    card.rect_bounds = card_bounds;
 
-    static_card.id = 9;
-    static_card.vertecies = graphic_vertecies_create(card_verts, 6);
-    static_card.trans = vec3_create(0, 0, -10);
-    static_card.rot = vec3_create(0, 0, 0);
-    static_card.scale = vec3_create(2, 2, 2);
-    static_card.model = mat4_model_object(&static_card);
-    static_card.model_inv = mat4_invert(static_card.model);
-    static_card.click_bounds = card_bounds;
-
-    const float triangle_verts[] = {
-        -1.f,  1.5f, 0.0f, 0.0f, 0.0f,
-        -1.f, -1.5f, 0.0f, 0.0f, 0.0f,
-         1.f, -1.5f, 0.0f, 0.0f, 0.0f
-    };
-    triangle.id = 1;
-    triangle.vertecies = graphic_vertecies_create(triangle_verts, 3);
-    triangle.scale = vec3_create(2, 2, 1);
+    cursor.id = 1;
+    cursor.vertecies = card.vertecies;
+    cursor.rot = vec3_create(0, 0, PI/4);
+    cursor.scale = vec3_create(0.08, 0.05, 1);
+    cursor.rect_bounds = card_bounds;
 
     text[0].id = 2;
-    text[0].vertecies = graphic_vertecies_create_text(font, "Konoha's state of the world");
+    text[0].vertecies = graphic_vertecies_create_text(font, "Dandadan dandadan dandadan dandadan dandadan");
     text[0].texture = font_tex;
     text[0].trans = vec3_create(-5, 0, -10);
     text[0].scale = vec3_create( 0.02, 0.02, 1);
     text[0].model = mat4_model_object(&text[0]);
 
     text[1].id = 3;
-    text[1].vertecies = graphic_vertecies_create_text(font, "I could be a martyr, I could be a cause");
+    text[1].vertecies = graphic_vertecies_create_text(font, "Neuro-sama rules the world!");
     text[1].texture = font_tex;
-    text[1].trans = vec3_create(-5,-0.6, -10);
-    text[1].scale = vec3_create( 0.012, 0.012, 1);
+    text[1].trans = vec3_create(-5, 7, -10);
+    text[1].scale = vec3_create( 0.02, 0.02, 1);
     text[1].model = mat4_model_object(&text[1]);
 
     text[2].id = 4;
@@ -88,6 +77,16 @@ void init_objects()
     text[2].trans = vec3_create(-5,-5, -10);
     text[2].scale = vec3_create( 0.01, 0.01, 1);
     text[2].model = mat4_model_object(&text[2]);
+
+    ortho_test.id = 6; /* In ndc */
+    ortho_test.vertecies = card.vertecies;
+    ortho_test.trans = vec3_create(0.78, -0.78, 0);
+    ortho_test.rot = vec3_create(0, 0, PI/2);
+    ortho_test.scale = vec3_create(0.1, 0.1, 1);
+    ortho_test.model = mat4_model_object(&ortho_test);
+    ortho_test.model_inv = mat4_invert(ortho_test.model);
+    ortho_test.rect_bounds = card_bounds;
+
 }
 
 int load_ascii_font(struct baked_font *font)
@@ -127,29 +126,26 @@ void object_oscillate(struct object *object, float step, int osc_y)
 
     object->trans.z = -10 - sin(step/6);
     object->model = mat4_model_object(object);
-    object->model = mat4_model_object(object);
+    object->model_inv = mat4_invert(object->model);
 }
 
-static float step_fast;
-static float step_slow;
+static float step;
 static vec3 clear_color = { 1, 1, 1 };
+static int oscillate_orientation = 1;
 void render()
 {
     int i;
 
-    step_fast += 0.1f;
-    step_slow += 0.03f;
+    step += oscillate_orientation ? 0.13f : 0.05f;
 
     graphic_clear(clear_color.x, clear_color.y, clear_color.z);
 
-    /* object_oscillate(&card, step_fast, 0); */
-    /* card.model_inv = mat4_invert(card.model); */
+    graphic_draw_object(&cursor, perspective);
+
+    graphic_draw_object(&ortho_test, mat4_identity());
+
+    object_oscillate(&card, step, oscillate_orientation);
     graphic_draw_object(&card, perspective);
-
-    graphic_draw_object(&static_card, perspective);
-
-    /* object_oscillate(&triangle, step_slow, 1); */
-    /* graphic_draw_object(&triangle, perspective); */
 
     for (i = 1; i < 3; i++)
         graphic_draw_object(&text[i], perspective);
@@ -157,21 +153,13 @@ void render()
     graphic_render(session);
 }
 
-void game_update()
-{
-    if (!session)
-        return;
-
-    render();
-}
-
 /* Assumes no View matrix & camera at origin */
-vec3 ndc_to_cameraspace(float aspect_ratio, float fov_y, vec2 ndc, float z_target)
+vec3 ndc_to_camspace(float aspect_ratio, float fov_y, vec2 ndc, float z_target)
 {
     float screen_height, screen_width;
     vec3 world;
 
-    screen_height = z_target * tan(fov_y/2);
+    screen_height = -z_target * tan(fov_y/2);
     screen_width = screen_height * aspect_ratio;
 
     world.x = ndc.x * screen_width;
@@ -194,24 +182,40 @@ void game_mouse_event(struct mouse_event event)
     char strbuf[128];
     vec2 mouse_ndc = screen_to_ndc(event.mouse_x, event.mouse_y);
     vec3 mouse_camspace = { 0, 0, 0 };
+    const float some_random_ahh_z = -5;
 
     if (!session)
         return;
 
-    /* test for static_card */
-    mouse_camspace = ndc_to_cameraspace(ASPECT_RATIO, DEG_TO_RAD(FOV_DEG), mouse_ndc, static_card.trans.z);
-    card.trans = mouse_camspace;
-    card.model = mat4_model_object(&card);
+    mouse_camspace = ndc_to_camspace(ASPECT_RATIO, DEG_TO_RAD(FOV_DEG), mouse_ndc, some_random_ahh_z);
+    cursor.trans = mouse_camspace;
+    cursor.model = mat4_model_object(&cursor);
 
     if (text[2].vertecies)
         graphic_vertecies_destroy(text[2].vertecies);
-    snprintf(strbuf, sizeof(strbuf), "cam: (%.2f, %.2f)", mouse_camspace.x, mouse_camspace.y);
+    snprintf(strbuf, sizeof(strbuf), "camspace: (%.2f, %.2f)", mouse_camspace.x, mouse_camspace.y);
     text[2].vertecies = graphic_vertecies_create_text(font, strbuf);
 
-    if (event.type == MOUSE_DOWN && event.type != MOUSE_UP)
+    /* experiment */
+    if (event.type != MOUSE_DOWN)
         return;
-    if (falls_in_click_rect(&static_card, &mouse_camspace, &mouse_camspace)) {
-        clear_color.y = clear_color.y == 1 ? 0 : 1;
-        LOG("success");
+    if (ndc_on_ortho_bounds(&ortho_test, mouse_ndc.x, mouse_ndc.y)) {
+        clear_color.z = clear_color.z ? 0 : 1;
+        oscillate_orientation = oscillate_orientation ? 0 : 1;
+    } 
+}
+
+void game_update()
+{
+    if (!session)
+        return;
+
+    if (origin_ray_intersects_bounds(&card, cursor.trans)) {
+        clear_color.y = 0;
+        step -= 0.075f;
+    } else {
+        clear_color.y = 1;
     }
+
+    render();
 }
