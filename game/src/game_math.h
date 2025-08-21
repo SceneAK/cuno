@@ -8,6 +8,9 @@ typedef struct { float m[4][4]; } mat4;
 typedef struct { float x, y; } vec2;
 typedef struct { float x, y, z; } vec3;
 
+static const vec3 VEC3_ONE = { 1, 1, 1 };
+static const vec3 VEC3_ZERO  = { 0, 0, 0 };
+
 /* VECTORS */
 vec2 vec2_create(float x, float y);
 vec3 vec3_create(float x, float y, float z);
@@ -16,7 +19,12 @@ vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w);
 
 /* MATRIX */
 /* Expected Row-Major */
-mat4 mat4_identity();
+static const mat4 MAT4_IDENTITY  =  { {
+        { 1, 0, 0, 0 },
+        { 0, 1, 0, 0 },
+        { 0, 0, 1, 0 },
+        { 0, 0, 0, 1 }, } };
+
 
 mat4 mat4_scale(vec3 vec);
 

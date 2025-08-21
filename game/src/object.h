@@ -1,4 +1,3 @@
-#include "system/logging.h"
 #include "system/graphic/graphic.h"
 
 struct object {
@@ -14,16 +13,16 @@ struct object {
     rect2D rect_bounds;
 };
 
+mat4 mat4_model_object(const struct object *obj)
+{
+    return mat4_model(obj->trans, obj->rot, obj->scale);
+}
+
 void graphic_draw_object(const struct object *object, mat4 perspective)
 {
     if (!object->vertecies)
         return;
     graphic_draw(object->vertecies, object->texture, mat4_mult(perspective, object->model));
-}
-
-mat4 mat4_model_object(const struct object *obj)
-{
-    return mat4_model(obj->trans, obj->rot, obj->scale);
 }
 
 int on_rect_bounds(const rect2D *rect_bounds, float local_x, float local_y)
@@ -39,7 +38,6 @@ int ndc_on_ortho_bounds(const struct object *obj, float ndc_x, float ndc_y)
     return on_rect_bounds(&obj->rect_bounds, local_coords.x, local_coords.y);
 }
 
-/* Keep it stupid. No need for raycast math. Just check intersection at z = 0 */
 int origin_ray_intersects_bounds(const struct object *obj, const vec3 ray_dir)
 {
     vec3 local_origin =  { obj->model_inv.m[0][3], obj->model_inv.m[1][3], obj->model_inv.m[2][3] };

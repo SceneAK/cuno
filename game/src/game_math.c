@@ -1,6 +1,6 @@
+#include <math.h>
 #include "system/logging.h"
 #include "game_math.h"
-#include <math.h>
 
 /* VECTORS */
 vec2 vec2_create(float x, float y)
@@ -31,16 +31,6 @@ vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
 }
 
 /* MATRICES */
-mat4 mat4_identity()
-{
-    mat4 ident = { {
-        { 1, 0, 0, 0 },
-        { 0, 1, 0, 0 },
-        { 0, 0, 1, 0 },
-        { 0, 0, 0, 1 },
-    } };
-    return ident;
-}
 
 mat4 mat4_scale(vec3 vec)
 {
@@ -127,7 +117,7 @@ mat4 mat4_mult(mat4 a, mat4 b)
 
 mat4 mat4_invert(mat4 mat)
 {
-    mat4 result = mat4_identity();
+    mat4 result = MAT4_IDENTITY;
     int pivot_row, pivot_col;
     int row, col;
     float temp, pivot, factor;
@@ -156,7 +146,7 @@ mat4 mat4_invert(mat4 mat)
         pivot = mat.m[pivot_row][pivot_col];
         if (pivot == 0) {
             LOG("mat4 not invertible");
-            return mat4_identity();
+            return MAT4_IDENTITY;
         }
 
         for (col = 0; col < 4; col++)

@@ -1,11 +1,10 @@
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "external/stb_truetype.h"
-#include "system/graphic/text.h"
-#include "system/graphic/graphic.h"
-#include "system/logging.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include "external/stb_truetype.h"
+#include "system/graphic/text.h"
+#include "system/graphic/graphic.h"
 
 void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len)
 {
