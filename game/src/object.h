@@ -31,7 +31,6 @@ int on_rect_bounds(const rect2D *rect_bounds, float local_x, float local_y)
         && ( (rect_bounds->y0 <= local_y) && (local_y <= rect_bounds->y1) );
 }
 
-/* Just a test/experimental function. any rotation will probably fuck it up */
 int ndc_on_ortho_bounds(const struct object *obj, float ndc_x, float ndc_y)
 {
     vec3 local_coords = vec3_mult_mat4(obj->model_inv, vec3_create(ndc_x, ndc_y, 0), 1);

@@ -34,7 +34,8 @@ void on_app_cmd(struct android_app *app, int32_t cmd)
         case APP_CMD_INIT_WINDOW:
             if (on_init_window(app) != 0)
                 exit(EXIT_FAILURE);
-            game_init(session);
+            if (game_init(session) != 0)
+                exit(EXIT_FAILURE);
             break;
         case APP_CMD_WINDOW_RESIZED:
             on_window_resized(app);

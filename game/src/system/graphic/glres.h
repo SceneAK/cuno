@@ -18,9 +18,9 @@ const char* fragment_shader_src =
     "varying vec2 vTexCoord;\n"
     "void main()\n"
     "{\n"
-    "   if (uUseTexture) {\n"
+    "   if (uUseTexture)\n"
     "       gl_FragColor = texture2D(uTexture, vTexCoord);\n"
-    "   } else {\n"
+    "   else\n"
     "       gl_FragColor = vec4(0.3, 0.93, 0.93, 1);\n"
-    "   }\n"
+    "   \n"
     "}\n";
