@@ -130,6 +130,7 @@ static GLuint default_aTexCoord;
 static GLuint default_uMVP;
 static GLuint default_uUseTexture;
 static GLuint default_uTexture;
+static GLuint default_uColorSolid;
 void create_program()
 {
     GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
@@ -155,6 +156,7 @@ void create_program()
     default_uMVP        = glGetUniformLocation(default_program, "uMVP");
     default_uUseTexture = glGetUniformLocation(default_program, "uUseTexture");
     default_uTexture    = glGetUniformLocation(default_program, "uTexture");
+    default_uColorSolid    = glGetUniformLocation(default_program, "uColorSolid");
     glUseProgram(default_program);
 
     glEnable(GL_BLEND);
@@ -218,7 +220,7 @@ void graphic_vertecies_destroy(struct graphic_vertecies *vertecies)
 
 static GLuint bound_vbo = -1;
 static GLuint bound_tex2D = -1;
-void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *texture, mat4 mvp)
+void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *texture, mat4 mvp, vec3 color)
 {
     if (!vertecies)
         return;
@@ -242,8 +244,9 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
         }
         glUniform1i(default_uTexture, 0);
     }
-    glUniform1i(default_uUseTexture, texture != NULL);
 
+    glUniform1i(default_uUseTexture, texture != NULL);
+    glUniform3f(default_uColorSolid, color.x, color.y, color.z);
     glUniformMatrix4fv(default_uMVP, 1, GL_TRUE, mvp.m[0]);
 
     glDrawArrays(GL_TRIANGLES, 0, vertecies->vert_count);

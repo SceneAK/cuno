@@ -3,7 +3,9 @@
 
 #define IS_PICKABLE_COLOR(color) ( 0 <= (color) && (color) <= 3 )
 struct card {
+    size_t id;
     enum card_type {
+        UNDEFINED = -1,
         NUMBER,
         REVERSE,
         SKIP,
@@ -32,24 +34,26 @@ struct game_state {
     struct player  *players;
     int             player_len;
     int             active_player_index;
-    enum action {
+    enum {
         NONE,
         PLAY,
-        DRAW
+        DRAW,
     } acted;
 
     struct card     top_card;
     int             turn_dir;
-    int             skip_next;
-    int             batsu;
+    int             skip_pool;
+    int             batsu_pool;
 };
 
+static size_t card_count = 0;
 void rand_card(struct card *card)
 {
     const float RATIO = RAND_MAX / 110;
     int random;
 
     random = rand();
+    card->id    = card_count++;
     card->color = random % 4;
 
     if ( random <= RATIO * 76 ) {
@@ -86,10 +90,34 @@ void rand_cards(struct card *cards, int amount)
     }
 }
 
-int add_cards(struct game_state *game, int player_index, int amount)
+int find_index(struct player *player, size_t id)
 {
-    struct player *player = game->players + player_index;
-    int            new_len = player->hand_len + amount;
+    int i;
+
+    for (i = 0; i < player->hand_len; i++) {
+        if (player->hand[i].id == id)
+            return i;
+    }
+    return -1;
+}
+
+void find_indices(int *indices, struct player *player, size_t *ids, int len)
+{
+    int i, j, indices_index = 0;
+    size_t id;
+
+    for (i = 0; i < player->hand_len; i++) {
+        id  = player->hand[i].id;
+
+        for (j = 0; j < len; j++)
+            if (id == ids[j])
+                indices[indices_index++] = i;
+    }
+}
+
+int append_cards(struct player *player, int amount)
+{
+    int new_len = player->hand_len + amount;
 
     player->hand = realloc(player->hand, new_len * sizeof(struct card));
     if (player->hand == NULL)
@@ -97,43 +125,31 @@ int add_cards(struct game_state *game, int player_index, int amount)
     rand_cards(player->hand + player->hand_len, amount);
     player->hand_len = new_len;
     return 0;
-} /*  曲: 帰る日 & ふたたび - 千と千尋の神隠し */
+}
 
-void remove_cards(struct game_state *game, int player_index, int *hand_indexes_asc, int indexes_len)
+int cmp(const void *a, const void *b)
 {
-    struct player *player = game->players + player_index;
-    int i, skip = 1;
+    return (*(int*)a - *(int*)b);
+}
+void remove_cards(struct player *player, int *indices, int len)
+{
+    int i, advance = 0;
 
-    for (i = hand_indexes_asc[0]; (i + skip) < player->hand_len; i++) {
-        if (skip < indexes_len && (i + skip) == hand_indexes_asc[skip])
-            skip++;
-        player->hand[i] = player->hand[i + skip];
+    for (i = 0; i < len; i++) {
+        player->hand[ indices[i] ].type = UNDEFINED;
     }
-    player->hand_len -= indexes_len;
+    for (i = 0; (i + advance) < player->hand_len; i++) {
+        while (player->hand[ i + advance ].type == UNDEFINED) 
+            advance++;
+
+        player->hand[i] = player->hand[i + advance];
+    }
+    player->hand_len -= len;
 }
 
-int is_legal_play(const struct game_state *game, struct card *card)
-{
-    int same_color = card->color == game->top_card.color;
-    int same_type  = card->type  == game->top_card.type;
-
-    /* Card specific */
-    if (card->type == NUMBER && same_type)
-        same_type = game->top_card.num == card->num;
-
-    if (game->acted == PLAY)
-        return same_type;
-    if (game->acted)
-        return 0;
-    if (game->batsu)
-        return same_type || card->type == PLUS4;
-
-    if (!same_color && !same_type && card->color != BLACK)
-        return 0;
-
-
-    return 1;
-}
+#define IS_SAME_COLOR(a, b) ((a).color == (b).color)
+#define IS_SAME_TYPE(a, b) ((a).type == (b).type) \
+                        && ((a).type != NUMBER || (a).num == (b).num)
 
 int play_card_effect(struct game_state *game, struct card *card, enum card_color arg_color)
 {
@@ -143,15 +159,15 @@ int play_card_effect(struct game_state *game, struct card *card, enum card_color
             break;
 
         case SKIP:
-            game->skip_next = 1;
+            game->skip_pool += 1;
             break;
 
         case PLUS2:
-            game->batsu += 2;
+            game->batsu_pool += 2;
             break;
 
         case PLUS4:
-            game->batsu += 4;
+            game->batsu_pool += 4;
         case PICK_COLOR:
             if (!IS_PICKABLE_COLOR(arg_color))
                 return -1;
@@ -171,8 +187,8 @@ void game_state_init(struct game_state *game, int player_len)
     game->players       = malloc( game->player_len*sizeof(struct player) );
     game->ended         = 0;
     game->turn_dir      = 1;
-    game->skip_next     = 0;
-    game->batsu         = 0;
+    game->skip_pool     = 0;
+    game->batsu_pool    = 0;
     srand(1);
     do 
         rand_card(&game->top_card); 
@@ -193,42 +209,85 @@ void deal_cards(struct game_state *game)
     }
 }
 
+int is_legal_draw(struct game_state *game)
+{
+    return !game->ended && !game->acted;
+}
 /* ACTS */
-int act_take_batsu(struct game_state *game)
+int act_draw_cards(struct game_state *game, int *amount_drawn)
 {
-    if (game->ended || !game->batsu || game->acted)
+    struct player *player = game->players + game->active_player_index;
+    *amount_drawn = 1;
+
+    if (!is_legal_draw(game))
         return -1;
 
-    add_cards(game, game->active_player_index, game->batsu);
+    if (game->batsu_pool) {
+        *amount_drawn = game->batsu_pool;
+        game->batsu_pool = 0;
+    }
+
+    if (append_cards(player, *amount_drawn) != 0)
+        return -1;
+
     game->acted = DRAW;
-    game->batsu = 0;
     return 0;
 }
 
-int act_draw_card(struct game_state *game)
+
+int is_legal_play(const struct game_state *game, int *indices, int len)
 {
-    if (game->ended || game->batsu || game->acted)
-        return -1;
+    int i, j, same_type, same_color;
+    const struct card *active_hand, *card, *previous_card;
 
-    add_cards(game, game->active_player_index, 1);
-    game->acted = DRAW;
+    if (game->ended || !len)
+        return 0;
 
-    return 0;
+    previous_card = &game->top_card;
+    active_hand = game->players[game->active_player_index].hand;
+
+    for (i = 0; i < len; i++) {
+        card = active_hand + indices[i];
+        same_type = IS_SAME_TYPE(*previous_card, *card);
+        same_color = IS_SAME_COLOR(*previous_card, *card);
+
+        if (i == 0) {
+            if (game->batsu_pool && !same_type && card->type != PLUS4)
+                return 0;
+            if (!same_color && !same_type && card->color != BLACK)
+                return 0;
+        }
+        else if (!same_type)
+            return 0;
+
+        /* check duplicates */
+        for (j = 0; j < i; j++)
+            if (indices[i] == indices[j])
+                return 0;
+
+        previous_card = card;
+    }
+    return 1;
 }
 
-int act_play_card(struct game_state *game, int hand_index, enum card_color arg_color)
+/* If shifting noticably impacts, combine follow-ups into one play. */
+int act_play_card(struct game_state *game, int *indices, int len)
 {
-    struct card *card = game->players[game->active_player_index].hand + hand_index;
+    struct player *player = game->players + game->active_player_index;
+    struct card *last_card;
+    int i;
 
-    if (game->ended || !is_legal_play(game, card))
+    if (!is_legal_play(game, indices, len))
         return -1;
 
-    if (play_card_effect(game, card, arg_color) != 0)
-        return -3;
-    game->top_card = *card;
+    for (i = 0; i < len; i++) {
+        last_card = player->hand + indices[i];
+        play_card_effect(game, last_card, RED);
+    }
 
+    game->top_card = *last_card;
     game->acted = PLAY;
-    remove_cards(game, game->active_player_index, &hand_index, 1);
+    remove_cards(player, indices, len);
     return 0;
 }
 
@@ -244,11 +303,8 @@ int end_turn(struct game_state *game)
         return 0;
     }
 
-    increment = game->turn_dir;
-    if (game->skip_next) {
-        increment *= 2;
-        game->skip_next = 0;
-    }
+    increment = (1 + game->skip_pool) * game->turn_dir;
+    game->skip_pool = 0;
 
     game->active_player_index += increment;
     if (game->active_player_index >= game->player_len)
@@ -256,32 +312,39 @@ int end_turn(struct game_state *game)
     if (game->active_player_index < 0)
         game->active_player_index += game->player_len;
 
-    game->acted = NONE;
+    game->acted = 0;
     return 0;
 }
 
 int supersmartAI_act(struct game_state *game)
 {
     struct player *player = game->players + game->active_player_index;
-    int i, total_card_expended;
-
-    for (i = 0; i < player->hand_len; i++) {
-        if (!is_legal_play(game, player->hand + i))
-            continue;
-
-        if (act_play_card(game, i, RED) != 0)
-            return -1;
-    }
+    int i, cards_drawn;
+    int *indices, indices_len = 0;
 
     if (game->acted) 
         return 0;
 
-    if (game->batsu)
-        return act_take_batsu(game) == 0 ? 2 : -3;
-    else
-        return act_draw_card(game) == 0 ? 1 : -4;
+    indices = malloc( sizeof(int) * player->hand_len );
+    if (indices == NULL)
+        return -1;
 
-    return -5;
+    for (i = 0; i < player->hand_len; i++) {
+        indices[indices_len] = i;
+        if (is_legal_play(game, indices, indices_len + 1)) {
+            indices_len++;
+            i = 0;
+        }
+    } 
+    if (indices_len != 0 && act_play_card(game, indices, indices_len) == 0) { LOG(">PLAY CARD");
+        for (i = 0; i < indices_len; i++) LOGF("Chosen Indices: %i", indices[i]);
+        free(indices); 
+        return 0;
+    }
+    else {
+        free(indices); LOG(">DRAW CARD");
+        return act_draw_cards(game, &cards_drawn) == 0 ? 0 : -2;
+    }
 }
 
 /* LOGGING & DEBUGGING */
@@ -324,20 +387,6 @@ const char *card_color_to_str(enum card_color color)
     }
 }
 
-const char *action_to_str(enum action action)
-{
-    switch (action) {
-        case NONE:
-            return "none";
-        case DRAW:
-            return "draw";
-        case PLAY:
-            return "play";
-        default:
-            return "Undefined action";
-    };
-}
-
 void log_card(struct card *card)
 {
     const char *card_type = card_type_to_str(card->type);
@@ -360,10 +409,10 @@ void log_game_state(struct game_state *game)
 {
     int i;
     LOGF(" - ended: %i", game->ended);
-    LOGF(" - acted: %s", action_to_str(game->acted));
+    LOGF(" - acted: %i", game->acted);
     LOGF(" - turn_dir: %i", game->turn_dir);
-    LOGF(" - skip_next: %i", game->skip_next);
-    LOGF(" - batsu: %i", game->batsu);
+    LOGF(" - skip_pool: %i", game->skip_pool);
+    LOGF(" - batsu_pool: %i", game->batsu_pool);
     LOGF(" - active_player_index: %i", game->active_player_index);
     LOG(" - top_card:");
     log_card(&game->top_card);

@@ -28,6 +28,7 @@ void on_destroy()
         graphic_session_destroy(session);
 }
 
+static int game_init_finished = 0;
 void on_app_cmd(struct android_app *app, int32_t cmd)
 {
     switch (cmd) {
@@ -36,6 +37,8 @@ void on_app_cmd(struct android_app *app, int32_t cmd)
                 exit(EXIT_FAILURE);
             if (game_init(session) != 0)
                 exit(EXIT_FAILURE);
+            else 
+                game_init_finished = 1;
             break;
         case APP_CMD_WINDOW_RESIZED:
             on_window_resized(app);
@@ -81,7 +84,7 @@ int on_input(struct android_app *app, AInputEvent *event)
 }
 
 void android_main(struct android_app *app) 
-{LOG("ENTERED ANDROID MAIN");
+{
     AAssetManager*      asset_mngr = app->activity->assetManager;
 
     asset_management_init(asset_mngr);
@@ -96,6 +99,7 @@ void android_main(struct android_app *app)
             if (source) 
                 source->process(app, source);
         }
-        game_update();
+        if (game_init_finished)
+            game_update();
     }
 }

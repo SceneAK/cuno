@@ -33,7 +33,7 @@ struct graphic_vertecies *graphic_vertecies_create(const float *verts, size_t ve
 
 void graphic_vertecies_destroy(struct graphic_vertecies *ctx);
 
-void graphic_draw(struct graphic_vertecies *ctx, struct graphic_texture *tex, mat4 mvp);
+void graphic_draw(struct graphic_vertecies *ctx, struct graphic_texture *tex, mat4 mvp, vec3 color);
 
 void graphic_clear(float r, float g, float b);
 

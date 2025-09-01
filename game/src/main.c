@@ -1,21 +1,21 @@
 #include "system/graphic/graphic.h"
 #include "system/graphic/text.h"
 #include "system/asset_management.h"
-#include "system/logging.h"
 #include "coord_util.h"
 #include "game_math.h"
+#include "game_logic.h"
 #include "object.h"
 #include "main.h"
-#include "game.h"
 
 #define ASPECT_RATIO ((float)session_info.width / session_info.height)
 
 /* RESOURCES */
 static struct graphic_session      *session;
 static struct graphic_session_info  session_info;
-static struct baked_font            font;
-static struct graphic_texture      *font_tex_shr;
+static struct graphic_texture      *font_texture;
+static struct graphic_vertecies    *card_vertecies;
 
+const rect2D                        CARD_BOUNDS = { -1.0f, -1.5f,   1.0f,  1.5f };
 static int                          obj_count;
 static mat4                         perspective;
 
@@ -26,20 +26,25 @@ static const float NEAR = 0.2f;
 static const float FOV_DEG = 90;
 
 /* OBJECTS */
-static struct object cursor;
-static struct object card;
-static struct object ortho_button;
-
-void init_objects()
+struct player_visual {
+    int                     player_index;
+    struct comp_transform   transform;
+    struct object          *cards;
+    size_t                  cards_len;
+};
+static struct player_visual player_visuals[2];
+void draw_new_card_object(struct player_visual *player_visual, struct card *card)
 {
-    int i, dist = 0;
-    font_tex_shr = graphic_texture_create(font.width, font.height, font.bitmap);
 
-    const rect2D card_bounds = {
-        -1.0f, -1.5f,
-         1.0f,  1.5f,
-    };
-    const float card_verts[] = {
+}
+
+int resources_init()
+{
+    unsigned char       buffer[1<<19];
+    asset_handle        handle;
+    struct baked_font   font;
+
+    const float card_verts_raw[] = {
         -1.0f,  1.5f, 0.0f, 0.0f, 0.0f,
         -1.0f, -1.5f, 0.0f, 0.0f, 0.0f,
          1.0f, -1.5f, 0.0f, 0.0f, 0.0f,
@@ -48,39 +53,31 @@ void init_objects()
          1.0f,  1.5f, 0.0f, 0.0f, 0.0f,
          1.0f, -1.5f, 0.0f, 0.0f, 0.0f
     };
-    card.id = obj_count++;
-    card.vertecies      = graphic_vertecies_create(card_verts, 6);
-    card.trans          = vec3_create(0, 0, -10);
-    card.rot            = VEC3_ZERO;
-    card.scale          = vec3_create(2.2, 2.2, 2.2);
-
-    cursor.id = obj_count++;
-    cursor.vertecies    = card.vertecies;
-    cursor.trans        = VEC3_ZERO;
-    cursor.rot          = vec3_create(0, 0, PI/4);
-    cursor.scale        = vec3_create(0.08, 0.05, 1);
-
-    ortho_button.id = obj_count++;
-    ortho_button.rect_bounds    = card_bounds;
-    ortho_button.vertecies      = card.vertecies;
-    ortho_button.trans          = VEC3_ZERO;
-    ortho_button.rot            = VEC3_ZERO;
-    ortho_button.scale          = vec3_create(0.15, 0.1, 1);
-    ortho_button.model          = mat4_model_object(&ortho_button);
-    ortho_button.model_inv      = mat4_invert(ortho_button.model);
-}
-
-int load_resources()
-{
-    unsigned char   buffer[1<<19];
-    asset_handle    handle;
 
     handle = asset_open(ASSET_PATH_FONT);
     asset_read(buffer, 1<<19, handle);
     font = create_ascii_baked_font(buffer);
     asset_close(handle);
 
+    font_texture = graphic_texture_create(font.width, font.height, font.bitmap);
+    card_vertecies = graphic_vertecies_create(card_verts_raw, 6);
+
+    perspective = mat4_perspective(DEG_TO_RAD(FOV_DEG), ASPECT_RATIO, NEAR);
+
     return 1;
+}
+
+void objects_init()
+{
+    player_visuals[0].transform.trans   = vec3_create(0, 7, -10);  
+    player_visuals[0].transform.rot     = vec3_create(-PI/8, 0, 0); 
+    player_visuals[0].transform.scale   = VEC3_ONE;
+    player_visuals[0].transform.model   = mat4_model_transform(&player_visuals[0].transform);
+
+    player_visuals[1].transform.trans   = vec3_create(0, -7, -10); 
+    player_visuals[1].transform.rot     = vec3_create(PI/8, 0, 0); 
+    player_visuals[1].transform.scale   = VEC3_ONE;
+    player_visuals[1].transform.model   = mat4_model_transform(&player_visuals[1].transform);
 }
 
 int game_init(struct graphic_session *created_session)
@@ -89,14 +86,12 @@ int game_init(struct graphic_session *created_session)
     session = created_session;
     session_info = graphic_session_info_get(created_session);
 
-    if (!load_resources())
-        return -1;
-
-    perspective = mat4_perspective(DEG_TO_RAD(FOV_DEG), ASPECT_RATIO, NEAR);
-    init_objects();
-
     game_state_init(&game_state, player_amount);
     deal_cards(&game_state);
+
+    if (!resources_init())
+        return -1;
+    objects_init();
 
     return 0;
 }
@@ -108,50 +103,34 @@ void render()
 
     graphic_clear(clear_color.x, clear_color.y, clear_color.z);
 
-    graphic_draw_object(&cursor, perspective);
-    graphic_draw_object(&ortho_button, MAT4_IDENTITY);
-
     graphic_render(session);
 }
 
-static int turn_count = 0;
 void game_mouse_event(struct mouse_event event)
 {
     vec2 mouse_ndc = screen_to_ndc(session_info.width, session_info.height, event.mouse_x, event.mouse_y);
     vec3 mouse_camspace = { 0, 0, 0 };
-    int return_code; 
 
     if (!session)
         return;
 
     mouse_camspace = ndc_to_camspace(ASPECT_RATIO, DEG_TO_RAD(FOV_DEG), mouse_ndc, -10);
-
-    cursor.trans = mouse_camspace;
-    cursor.model = mat4_model_object(&cursor);
-
-    if (event.type == MOUSE_DOWN && ndc_on_ortho_bounds(&ortho_button, mouse_ndc.x, mouse_ndc.y)) {
-        LOG(" ");
-        LOGF(" == TURN %i == ", ++turn_count);
-        return_code = supersmartAI_act(&game_state);
-        if (return_code < 0) {
-            LOGF("! supersmartAI err: %i", return_code);
-            return;
-        }else
-            LOGF("supersmartAI move: %s", return_code == 1 ? "Draw" : (return_code == 2 ? "Batsu" : "Play"));
-        LOG(" ");
-        LOG("logging game_state");
-        log_game_state(&game_state);
-        end_turn(&game_state);
-        LOG(" == END TURN == ");
-        LOG(" ");
-        LOG(" ");
-    }
 }
 
+static int turn_count = 0;
 void game_update()
 {
-    if (game_state.ended)
+    if (game_state.ended || turn_count > 10)
         exit(EXIT_SUCCESS);
+
+    LOG("");
+    LOG("");
+    LOGF(" == TURN %i ==", turn_count++);
+    LOGF("SUPERSMARTAI returns: %i", supersmartAI_act(&game_state));
+    log_game_state(&game_state);
+    end_turn(&game_state);
+    LOG("");
+    LOG("");
 
     if (!session)
         return;
