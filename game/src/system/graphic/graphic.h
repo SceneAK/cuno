@@ -42,10 +42,5 @@ void graphic_render(struct graphic_session *session);
 mat4 mat4_perspective(float fov_y, float aspect, float near);
 
 /* Utils */
-typedef struct {
-    float x0; float y0; 
-    float x1; float y1;
-} rect2D;
-
 void construct_3D_quad(float *verts, rect2D dimension, rect2D tex);
 #endif

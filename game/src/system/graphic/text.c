@@ -38,11 +38,11 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf)
     return font;
 }
 
-float *create_text_verts(struct baked_font font, size_t *vert_count, const char *text)
+float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text)
 {
     struct codepoint    cp;
     float               cp_width, cp_height;
-    float               x_head = 0;
+    float               y_head = 0, x_head = 0;
 
     size_t              verts_per_quad = 6;
     rect2D              dimension, tex;
@@ -54,14 +54,20 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, const char 
         return NULL;
 
     for (const char *c = text; *c; c++) {
+        if (*c == '\n') {
+            y_head += line_height;
+            x_head = 0;
+            continue;
+        }
+
         cp = font.cps[*c - 32];
         cp_width = cp.x1 - cp.x0;
         cp_height = cp.y1 - cp.y0;
 
         dimension.x0 =  cp.xoff + x_head;
-        dimension.y0 = -cp.yoff;
+        dimension.y0 = -cp.yoff + y_head;
         dimension.x1 =  cp.xoff + cp_width + x_head;
-        dimension.y1 = -cp.yoff - cp_height;
+        dimension.y1 = -cp.yoff - cp_height + y_head;
 
         tex.x0 = cp.x0 / font.width;
         tex.y0 = cp.y0 / font.height;
@@ -76,13 +82,13 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, const char 
     return vert_data;
 }
 
-struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, const char *text)
+struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text)
 {
     struct graphic_vertecies *graphic_verts;
     size_t                   vert_count;
     float                   *verts;
 
-    verts = create_text_verts(font, &vert_count, text);
+    verts = create_text_verts(font, &vert_count, line_height, text);
     graphic_verts = graphic_vertecies_create(verts, vert_count);
     free(verts);
     return graphic_verts;

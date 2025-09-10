@@ -11,10 +11,17 @@ typedef struct { float x, y, z; } vec3;
 static const vec3 VEC3_ONE = { 1, 1, 1 };
 static const vec3 VEC3_ZERO  = { 0, 0, 0 };
 
+typedef struct {
+    float x0; float y0; 
+    float x1; float y1;
+} rect2D;
+
 /* VECTORS */
 vec2 vec2_create(float x, float y);
 vec3 vec3_create(float x, float y, float z);
 
+vec3 vec3_sum(vec3 a, vec3 b);
+vec3 vec3_mult(vec3 a, vec3 b);
 vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w);
 
 /* MATRIX */
@@ -39,5 +46,12 @@ mat4 mat4_mult(mat4 a, mat4 b); /* Chains nicely at the cost of copying mat4s */
 mat4 mat4_invert(mat4 mat);
 
 mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale);
+
+
+/* UTILS */
+
+int point_lands_on_rect(const rect2D *rect, const mat4 *rect_model_inv, vec3 point);
+
+int origin_ray_intersects_rect(const rect2D *rect, const mat4 *rect_model_inv, const vec3 origin_ray_dir);
 
 #endif

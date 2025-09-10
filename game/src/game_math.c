@@ -15,6 +15,27 @@ vec3 vec3_create(float x, float y, float z)
     return val;
 }
 
+vec3 vec3_add(vec3 a, vec3 b)
+{
+    vec3 sum = {
+        a.x + b.x,
+        a.y + b.y,
+        a.z + b.z
+    };
+    return sum;
+}
+
+vec3 vec3_mult(vec3 a, vec3 b)
+{
+    vec3 product = {
+        a.x * b.x,
+        a.y * b.y,
+        a.z * b.z
+    };
+    return product;
+}
+
+
 vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
 {
     vec3 result;
@@ -170,7 +191,6 @@ mat4 mat4_invert(mat4 mat)
 }
 
 /* MATRIX UTILS */
-
 mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale)
 {
     mat4 model = mat4_scale(scale);
@@ -186,4 +206,31 @@ mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale)
         model = mat4_mult(mat4_trans(trans), model);
 
     return model;
+}
+
+/* UTILS */
+int on_rect(const rect2D *rect, float local_x, float local_y)
+{
+    return ( (rect->x0 <= local_x) && (local_x <= rect->x1) )
+        && ( (rect->y0 <= local_y) && (local_y <= rect->y1) );
+}
+int point_lands_on_rect(const rect2D *rect, const mat4 *rect_model_inv, vec3 point)
+{
+    vec3 local_coords = vec3_mult_mat4(*rect_model_inv, point, 1);
+    return on_rect(rect, local_coords.x, local_coords.y);
+}
+int origin_ray_intersects_rect(const rect2D *rect, const mat4 *rect_model_inv, const vec3 origin_ray_dir)
+{
+    vec3 local_origin =  { rect_model_inv->m[0][3], rect_model_inv->m[1][3], rect_model_inv->m[2][3] };
+    vec3 local_dir;
+    float intersect_x, intersect_y;
+
+    local_dir = vec3_mult_mat4(*rect_model_inv, origin_ray_dir, 0);
+
+    if (local_dir.z == 0)
+        return 0;
+    intersect_x = local_origin.x + local_dir.x * (-local_origin.z / local_dir.z);
+    intersect_y = local_origin.y + local_dir.y * (-local_origin.z / local_dir.z);
+
+    return on_rect(rect, intersect_x, intersect_y);
 }
