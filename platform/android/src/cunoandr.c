@@ -28,7 +28,7 @@ void on_destroy()
         graphic_session_destroy(session);
 }
 
-static int game_init_finished = 0;
+static char game_init_finished = 0;
 void on_app_cmd(struct android_app *app, int32_t cmd)
 {
     switch (cmd) {
@@ -99,7 +99,8 @@ void android_main(struct android_app *app)
             if (source) 
                 source->process(app, source);
         }
-        if (game_init_finished)
-            game_update();
+        if (!game_init_finished)
+            continue;
+        game_update();
     }
 }

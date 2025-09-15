@@ -6,9 +6,9 @@ add_library(game STATIC
     ${SRC_DIR}/game_math.c
     ${SRC_DIR}/game_logic.c
     ${SRC_DIR}/component.c
+    ${SRC_DIR}/utils.c
     ${SRC_DIR}/system/graphic/egl.c
     ${SRC_DIR}/system/graphic/text.c
-#   ${SRC_DIR}/external/stb_truetype.h
 )
 
 find_library(GLES NAMES GLESv2 REQUIRED)

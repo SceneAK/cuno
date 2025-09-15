@@ -42,5 +42,5 @@ void graphic_render(struct graphic_session *session);
 mat4 mat4_perspective(float fov_y, float aspect, float near);
 
 /* Utils */
-void construct_3D_quad(float *verts, rect2D dimension, rect2D tex);
+void graphic_construct_3D_quad(float *verts, rect2D dimension, rect2D tex);
 #endif

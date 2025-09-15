@@ -28,7 +28,7 @@ struct card {
     short num;
 };
 
-DEFINE_ARRAY_LIST(struct card, card_list)
+DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
 
 struct player {
     short               id;

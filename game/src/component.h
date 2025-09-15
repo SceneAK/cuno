@@ -3,35 +3,65 @@
 #include "system/graphic/graphic.h"
 #include "utils.h"
 
-struct comp_visual {
+struct transform {
+    struct transform       *parent;
+    vec3                    trans, rot, scale;
+    char                    synced;
+
+    unsigned short          matrix_version;
+    mat4                    matrix;
+};
+void transform_set_default(struct transform *transf);
+
+void transform_sync_matrix(struct transform *transf);
+
+DEFINE_BASIC_POOL_WRAPPER(static, struct transform, transform_pool)
+
+void transform_pool_sync_matrix(struct transform_pool *pool);
+
+
+struct visual {
     struct graphic_vertecies   *vertecies;
     struct graphic_texture     *texture;
     mat4                       *model;
     vec3                        color;
 };
-void comp_visual_set_default(struct comp_visual *visual);
+void visual_set_default(struct visual *visual);
 
-void comp_visual_draw(struct comp_visual *visual, mat4 *perspective);
+void visual_draw(struct visual *visual, const mat4 *perspective);
 
-DECLARE_BASIC_POOL(struct comp_visual, comp_visual_pool)
+DEFINE_BASIC_POOL_WRAPPER(static, struct visual, visual_pool)
 
-void comp_visual_pool_draw(struct comp_visual_pool *pool, mat4 *perspective);
+void visual_pool_draw(struct visual_pool *pool, const mat4 *perspective);
 
 
-struct comp_transform {
-    struct comp_transform  *parent;
-    vec3                    trans, rot, scale;
-    char                    desynced; /* User is responsible to mark desynced if above fields change */
+struct hitrect {
+    struct transform   *transf;
+    mat4                cached_matrix_inv;
+    unsigned short      cached_version;
 
-    mat4                    model;
+    enum {
+        RECT_CAMSPACE, 
+        RECT_ORTHOSPACE
+    }                   rect_type;
+    rect2D              rect;
+    /* Keeping these in version control
+    unsigned char       hit_mask;
+    char                hit_state;
+    */
 };
-void comp_transform_set_default(struct comp_transform *transf);
+void hitrect_set_default(struct hitrect *hitrect);
 
-void comp_transform_sync_model(struct comp_transform *transf);
+int hitrect_check_hit(struct hitrect *hitrect, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray);
 
+/*
+void hitrect_try_hit(struct hitrect *hitrect, const vec2 *mouse_ndc, const vec3 *mouse_ray_dir);
 
-DECLARE_BASIC_POOL(struct comp_transform, comp_transform_pool)
+DEFINE_BASIC_POOL_WRAPPER(static, struct hitrect, hitrect_pool)
 
-void comp_transform_pool_sync_model(struct comp_transform_pool *pool);
+void hitrect_pool_try_hit(struct hitrect_pool *pool, const vec2 *mouse_ndc, const vec3 *mouse_ray_dir);
+
+void hitrect_pool_reset_hit_state(struct hitrect_pool *pool);
+*/
 
 #endif

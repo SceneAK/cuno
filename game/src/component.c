@@ -1,68 +1,101 @@
 #include <string.h>
 #include "system/graphic/graphic.h"
+#include "system/logging.h"
 #include "game_math.h"
 #include "component.h"
 
-void comp_visual_set_default(struct comp_visual *visual)
+/* TRANSFORM */
+void transform_set_default(struct transform *transf)
+{
+    transf->parent          = NULL;
+    transf->trans           = VEC3_ZERO;
+    transf->rot             = VEC3_ZERO;
+    transf->scale           = VEC3_ONE;
+    transf->synced          = 0;
+
+    transf->matrix          = MAT4_IDENTITY;
+    transf->matrix_version  = 0;
+}
+void transform_sync_matrix(struct transform *transf)
+{
+    if (transf->synced)
+        return;
+
+    transf->matrix = mat4_trs(transf->trans, transf->rot, transf->scale);
+    if (transf->parent) {
+        transform_sync_matrix(transf->parent);
+        transf->matrix = mat4_mult(transf->parent->matrix, transf->matrix);
+    }
+    transf->matrix_version++;
+    transf->synced = 1;
+}
+
+void transform_pool_sync_matrix(struct transform_pool *pool)
+{
+    int i; 
+    for (i = 0; i < pool->allocated_len; i++) {
+        if (!pool->active[i])
+            continue;
+        transform_sync_matrix(&pool->elements[i]);
+    }
+}
+
+/* VISUAL */
+void visual_set_default(struct visual *visual)
 {
     visual->vertecies   = NULL;
     visual->texture     = NULL;
     visual->model       = NULL;
     visual->color       = VEC3_ZERO;
 }
-void comp_visual_draw(struct comp_visual *visual, mat4 *perspective)
+void visual_draw(struct visual *visual, const mat4 *perspective)
 {
-    if (!visual->vertecies)
+    if (!visual->vertecies || !visual->model)
         return;
-    graphic_draw(visual->vertecies, visual->texture, mat4_mult(*perspective, *visual->model), visual->color);
-
+    graphic_draw(visual->vertecies, 
+                 visual->texture, 
+                 mat4_mult(*perspective, *visual->model),
+                 visual->color);
 }
 
-DEFINE_BASIC_POOL(struct comp_visual, comp_visual_pool);
-
-void comp_visual_pool_render(struct comp_visual_pool *pool, mat4 *perspective)
+void visual_pool_draw(struct visual_pool *pool, const mat4 *perspective)
 {
-    int i; 
+    int i;
     for (i = 0; i < pool->allocated_len; i++) {
         if (!pool->active[i])
             continue;
-        comp_visual_draw(&pool->elements[i], perspective);
+        visual_draw(&pool->elements[i], perspective);
     }
 }
 
-mat4 mat4_model_transform(const struct comp_transform *transf)
+/* HITRECT */
+void hitrect_set_default(struct hitrect *hitrect)
 {
-    return mat4_model(transf->trans, transf->rot, transf->scale);
+    hitrect->transf             = NULL;
+    hitrect->cached_matrix_inv  = MAT4_IDENTITY;
+    hitrect->cached_version     = 0;
+
+    hitrect->rect_type          = RECT_CAMSPACE;
+    hitrect->rect               = RECT2D_ZERO;
 }
-void comp_transform_set_default(struct comp_transform *transf)
+
+static void hitrect_sync_matrix_inv(struct hitrect *hitrect)
 {
-    transf->parent  = NULL;
-    transf->trans   = VEC3_ZERO;
-    transf->rot     = VEC3_ZERO;
-    transf->scale   = VEC3_ONE;
-    transf->desynced = 0;
-}
-void comp_transform_sync_model(struct comp_transform *transf)
-{
-    if (!transf->desynced)
+    if (hitrect->cached_version == hitrect->transf->matrix_version)
         return;
 
-    transf->model = mat4_model_transform(transf);
-    if (transf->parent) {
-        comp_transform_sync_model(transf->parent);
-        transf->model = mat4_mult(transf->parent->model, transf->model);
-    }
-    transf->desynced = 0;
+    hitrect->cached_version = hitrect->transf->matrix_version;
+    hitrect->cached_matrix_inv = mat4_invert(hitrect->transf->matrix);
 }
 
-DEFINE_BASIC_POOL(struct comp_transform, comp_transform_pool)
-
-void comp_transform_pool_sync_model(struct comp_transform_pool *pool)
+int hitrect_check_hit(struct hitrect *hitrect, const vec2 *mouse_ndc, const vec3 *mouse_camspace_ray)
 {
-    int i; 
-    for (i = 0; i < pool->allocated_len; i++) {
-        if (!pool->active[i])
-            continue;
-        comp_transform_sync_model(&pool->elements[i]);
-    }
+    if (!hitrect->transf)
+        return 0;
+    hitrect_sync_matrix_inv(hitrect);
+
+    if (hitrect->rect_type == RECT_CAMSPACE)
+        return origin_ray_intersects_rect(&hitrect->rect, &hitrect->cached_matrix_inv, *mouse_camspace_ray);
+    else 
+        return point_lands_on_rect(&hitrect->rect, &hitrect->cached_matrix_inv, vec3_create(mouse_ndc->x, mouse_ndc->y, 0));
 }

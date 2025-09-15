@@ -28,7 +28,7 @@ static const EGLint ctx_required_attr[] = {
     EGL_NONE
 };
 
-const char* egl_err_to_str(EGLint err)
+static const char* egl_err_to_str(EGLint err)
 {
     switch(err) {
         case EGL_SUCCESS: return "EGL_SUCCESS";
@@ -80,7 +80,7 @@ int graphic_session_destroy(struct graphic_session *session)
     return 0;
 }
 
-void on_graphic_ready();
+static void on_graphic_ready();
 int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
 {
     eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -131,10 +131,10 @@ static GLuint default_uMVP;
 static GLuint default_uUseTexture;
 static GLuint default_uTexture;
 static GLuint default_uColorSolid;
-void create_program()
+static void create_program()
 {
-    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
-    GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, VERTEX_SHADER_SRC);
+    GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER, FRAGMENT_SHADER_SRC);
 
     GLuint default_program = glCreateProgram();
     glAttachShader(default_program, vertex_shader);
@@ -162,7 +162,7 @@ void create_program()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
-void on_graphic_ready()
+static void on_graphic_ready()
 {
     create_program();
 }
@@ -253,19 +253,8 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
 }
 
 /* Utils */
-mat4 mat4_perspective(float fov_y, float aspect, float near)
-{
-    float f = 1/tan(fov_y/2);
-    mat4 result = {{
-        { f/aspect, 0, 0, 0 },
-        { 0, f, 0, 0 },
-        { 0, 0, -1, -2 * near },
-        { 0, 0, -1, 0 }
-    }};
-    return result;
-}
 /* Assumes 30 elements allocated */
-void construct_3D_quad(float *verts, rect2D dimension, rect2D tex) 
+void graphic_construct_3D_quad(float *verts, rect2D dimension, rect2D tex) 
 {
     verts[0]   = dimension.x0; verts[1]  = dimension.y0; verts[2]  = 0.0f; verts[3]  = tex.x0; verts[4]  = tex.y0;
      verts[5]  = dimension.x1; verts[6]  = dimension.y0; verts[7]  = 0.0f; verts[8]  = tex.x1; verts[9]  = tex.y0;

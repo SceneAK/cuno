@@ -191,41 +191,95 @@ mat4 mat4_invert(mat4 mat)
 }
 
 /* MATRIX UTILS */
-mat4 mat4_model(vec3 trans, vec3 rot, vec3 scale)
+mat4 mat4_trs(vec3 trans, vec3 rot, vec3 scale)
 {
-    mat4 model = mat4_scale(scale);
+    mat4 trs = mat4_scale(scale);
 
     if (rot.x)
-        model = mat4_mult(mat4_rotx(rot.x), model);
+        trs = mat4_mult(mat4_rotx(rot.x), trs);
     if (rot.y)
-        model = mat4_mult(mat4_roty(rot.y), model);
+        trs = mat4_mult(mat4_roty(rot.y), trs);
     if (rot.z)
-        model = mat4_mult(mat4_rotz(rot.z), model);
+        trs = mat4_mult(mat4_rotz(rot.z), trs);
 
     if (trans.x || trans.y || trans.z)
-        model = mat4_mult(mat4_trans(trans), model);
+        trs = mat4_mult(mat4_trans(trans), trs);
 
-    return model;
+    return trs;
+}
+mat4 mat4_perspective(float fov_y, float aspect, float near)
+{
+    float f = 1/tan(fov_y/2);
+    mat4 result = {{
+        { f/aspect, 0, 0, 0 },
+        { 0, f, 0, 0 },
+        { 0, 0, -1, -2 * near },
+        { 0, 0, -1, 0 }
+    }};
+    return result;
+}
+mat4 mat4_orthographic(float width, float height, float far)
+{
+    mat4 result = {{
+        { 2/width, 0, 0, 0 },
+        { 0, 2/height, 0, 0 },
+        { 0, 0, -2/far, -1 },
+        { 0, 0, 0, 1 }
+    }};
+    return result;
 }
 
-/* UTILS */
-int on_rect(const rect2D *rect, float local_x, float local_y)
+/* UTILS - COORDS */
+vec2 screen_to_ndc(float width, float height, float x, float y)
+{
+    vec2 ndc = {
+        2*(x / width) - 1,
+        1 - 2*(y / height)
+    };
+    return ndc;
+}
+
+vec3 ndc_to_camspace(float aspect_ratio, float fov_y, vec2 ndc, float z_slice)
+{
+    float slice_half_height, slice_half_width;
+    vec3 camspace;
+
+    slice_half_height = -z_slice * tan(fov_y/2);
+    slice_half_width  = slice_half_height * aspect_ratio;
+
+    camspace.x = ndc.x * slice_half_width;
+    camspace.y = ndc.y * slice_half_height;
+    camspace.z = z_slice;
+    return camspace;
+}
+
+vec2 ndc_to_orthospace(float ortho_width, float ortho_height, vec2 ndc)
+{
+    vec2 ortho = {
+        ndc.x * ortho_width/2,
+        ndc.y * ortho_height/2
+    };
+    return ortho;
+}
+
+/* UTILS - RECT BOUNDS */
+static int on_rect(const rect2D *rect, float local_x, float local_y)
 {
     return ( (rect->x0 <= local_x) && (local_x <= rect->x1) )
         && ( (rect->y0 <= local_y) && (local_y <= rect->y1) );
 }
-int point_lands_on_rect(const rect2D *rect, const mat4 *rect_model_inv, vec3 point)
+int point_lands_on_rect(const rect2D *rect, const mat4 *rect_inv, vec3 point)
 {
-    vec3 local_coords = vec3_mult_mat4(*rect_model_inv, point, 1);
+    vec3 local_coords = vec3_mult_mat4(*rect_inv, point, 1);
     return on_rect(rect, local_coords.x, local_coords.y);
 }
-int origin_ray_intersects_rect(const rect2D *rect, const mat4 *rect_model_inv, const vec3 origin_ray_dir)
+int origin_ray_intersects_rect(const rect2D *rect, const mat4 *rect_inv, const vec3 origin_ray)
 {
-    vec3 local_origin =  { rect_model_inv->m[0][3], rect_model_inv->m[1][3], rect_model_inv->m[2][3] };
+    vec3 local_origin =  { rect_inv->m[0][3], rect_inv->m[1][3], rect_inv->m[2][3] };
     vec3 local_dir;
     float intersect_x, intersect_y;
 
-    local_dir = vec3_mult_mat4(*rect_model_inv, origin_ray_dir, 0);
+    local_dir = vec3_mult_mat4(*rect_inv, origin_ray, 0);
 
     if (local_dir.z == 0)
         return 0;

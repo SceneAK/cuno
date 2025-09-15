@@ -1,7 +1,7 @@
 #include <GLES2/gl2.h>
 #include "system/logging.h"
 
-GLuint compile_shader(GLenum type, const char* source) {
+static GLuint compile_shader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);

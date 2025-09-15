@@ -6,7 +6,7 @@
 #include "system/graphic/text.h"
 #include "system/graphic/graphic.h"
 
-void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len)
+static void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len)
 {
     for (int i = 0; i < len; i++) {
         cps[i].x0 = bakedchr[i].x0; cps[i].y0 = bakedchr[i].y0;
@@ -74,7 +74,7 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, float line_
         tex.x1 = cp.x1 / font.width;
         tex.y1 = cp.y1 / font.height;
 
-        construct_3D_quad(vert_data + ((*vert_count) * VERT_NUM_OF_ELEMENTS), dimension, tex);
+        graphic_construct_3D_quad(vert_data + ((*vert_count) * VERT_NUM_OF_ELEMENTS), dimension, tex);
         *vert_count += verts_per_quad;
 
         x_head += cp.xadv;
@@ -93,4 +93,3 @@ struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, 
     free(verts);
     return graphic_verts;
 }
-

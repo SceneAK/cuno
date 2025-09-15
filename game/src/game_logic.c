@@ -22,7 +22,7 @@ vec3 card_color_to_rgb(enum card_color color)
 }
 
 static size_t card_count = 0;
-void rand_card(struct card *card)
+static void rand_card(struct card *card)
 {
     const float RATIO = RAND_MAX / 110;
     int random;
@@ -57,7 +57,7 @@ void rand_card(struct card *card)
         card->color = BLACK;
     }
 }
-void rand_cards(struct card *cards, int amount)
+static void rand_cards(struct card *cards, int amount)
 {
     int i;
     for (i = 0; i < amount; i++) {
@@ -87,13 +87,13 @@ void find_indices(int *indices, const struct player *player, size_t *ids, int le
     }
 }
 
-void append_cards(struct player *player, int amount)
+static void append_cards(struct player *player, int amount)
 {
     card_list_append_empty(&player->hand, amount);
     rand_cards(player->hand.elements + player->hand.len - amount, amount);
 }
 
-void remove_cards(struct player *player, const size_t *indices, size_t len)
+static void remove_cards(struct player *player, const size_t *indices, size_t len)
 {
     card_list_remove_swp(&player->hand, indices, len);
 }
@@ -102,7 +102,7 @@ void remove_cards(struct player *player, const size_t *indices, size_t len)
 #define IS_SAME_TYPE(a, b) ((a).type == (b).type) \
                         && ((a).type != NUMBER || (a).num == (b).num)
 
-int play_card_effect(struct game_state *game, struct card *card, enum card_color arg_color)
+static int play_card_effect(struct game_state *game, struct card *card, enum card_color arg_color)
 {
     switch (card->type) {
         case REVERSE:
@@ -131,7 +131,7 @@ int play_card_effect(struct game_state *game, struct card *card, enum card_color
     return 0;
 }
 
-void managed_game_state_init(struct game_state *game, int player_len)
+void game_state_init(struct game_state *game, int player_len)
 {
     game->active_player_index = 0;
     game->player_len    = player_len;
@@ -263,6 +263,7 @@ int end_turn(struct game_state *game)
     game->acted = 0;
     return 0;
 }
+
 
 int supersmartAI_act(struct game_state *game)
 {
