@@ -3,21 +3,23 @@
 #include "game_logic.h"
 #include "game_math.h"
 
+#define DIV_255(val) val/255.0f
+
 vec3 card_color_to_rgb(enum card_color color)
 {
     switch (color) {
         case RED:
-            return vec3_create(255, 45, 45);
+            return vec3_create(DIV_255(255), DIV_255(45), DIV_255(45));
         case GREEN:
-            return vec3_create(44, 255, 83);
+            return vec3_create(DIV_255(44), DIV_255(255), DIV_255(83));
         case BLUE:
-            return vec3_create(44, 114, 255);
+            return vec3_create(DIV_255(44), DIV_255(114), DIV_255(255));
         case YELLOW:
-            return vec3_create(255, 220, 44);
+            return vec3_create(DIV_255(255), DIV_255(220), DIV_255(44));
         case BLACK:
             return VEC3_ZERO;
         default:
-            return vec3_create(255, 0, 255);
+            return vec3_create(DIV_255(255), DIV_255(0), DIV_255(255));
     }
 }
 

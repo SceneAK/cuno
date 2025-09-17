@@ -23,7 +23,7 @@ void transform_pool_sync_matrix(struct transform_pool *pool);
 struct visual {
     struct graphic_vertecies   *vertecies;
     struct graphic_texture     *texture;
-    mat4                       *model;
+    const mat4                 *model;
     vec3                        color;
 };
 void visual_set_default(struct visual *visual);
@@ -36,32 +36,18 @@ void visual_pool_draw(struct visual_pool *pool, const mat4 *perspective);
 
 
 struct hitrect {
-    struct transform   *transf;
-    mat4                cached_matrix_inv;
-    unsigned short      cached_version;
+    const struct transform *transf;
+    mat4                    cached_matrix_inv;
+    unsigned short          cached_version;
 
     enum {
         RECT_CAMSPACE, 
         RECT_ORTHOSPACE
-    }                   rect_type;
-    rect2D              rect;
-    /* Keeping these in version control
-    unsigned char       hit_mask;
-    char                hit_state;
-    */
+    }                       rect_type;
+    rect2D                  rect;
 };
 void hitrect_set_default(struct hitrect *hitrect);
 
 int hitrect_check_hit(struct hitrect *hitrect, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray);
-
-/*
-void hitrect_try_hit(struct hitrect *hitrect, const vec2 *mouse_ndc, const vec3 *mouse_ray_dir);
-
-DEFINE_BASIC_POOL_WRAPPER(static, struct hitrect, hitrect_pool)
-
-void hitrect_pool_try_hit(struct hitrect_pool *pool, const vec2 *mouse_ndc, const vec3 *mouse_ray_dir);
-
-void hitrect_pool_reset_hit_state(struct hitrect_pool *pool);
-*/
 
 #endif

@@ -1,3 +1,4 @@
+#include "system/logging.h"
 #include <stdlib.h>
 #include <string.h>
 #include "utils.h"
@@ -21,7 +22,9 @@ void basic_pool_deinit(struct basic_pool *pool)
 }
 void *basic_pool_request(struct basic_pool *pool, size_t element_size)
 {
+    void *return_val;
     int i;
+
     for (i = 0; i < pool->allocated_len; i++) {
         if (!pool->active[i]) {
             pool->active[i] = 1;
@@ -34,11 +37,12 @@ void *basic_pool_request(struct basic_pool *pool, size_t element_size)
         return NULL;
 
     pool->active[pool->allocated_len] = 1;
+    return_val = ( (char *)pool->elements + pool->allocated_len * element_size );
     for (i = pool->allocated_len + 1; i < 2 * pool->allocated_len; i++)
         pool->active[i] = 0;
     pool->allocated_len *= 2;
 
-    return (void *)( (char *)pool->elements + pool->allocated_len * element_size );
+    return return_val;
 }
 void basic_pool_return(struct basic_pool *pool, void *item)
 {

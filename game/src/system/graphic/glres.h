@@ -11,17 +11,26 @@ static const char* VERTEX_SHADER_SRC =
     "   vTexCoord = aTexCoord;\n"
     "}\n";
 
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+#define FRAG_MODE_COLOR 0
+#define FRAG_MODE_TEXTURE 1
+#define FRAG_MODE_TEXTURE_MASK 2
+
 static const char* FRAGMENT_SHADER_SRC =
     "precision mediump float;\n"
-    "uniform bool uUseTexture;\n"
+    "uniform int uFragMode;\n"
     "uniform vec3 uColorSolid;\n"
     "uniform sampler2D uTexture;\n"
     "varying vec2 vTexCoord;\n"
     "void main()\n"
     "{\n"
-    "   if (uUseTexture)\n"
+    "   if (uFragMode == "STR(FRAG_MODE_TEXTURE)")\n"
     "       gl_FragColor = texture2D(uTexture, vTexCoord);\n"
-    "   else\n"
+    "   else if (uFragMode ==  "STR(FRAG_MODE_TEXTURE_MASK)")\n"
+    "       gl_FragColor = vec4(uColorSolid.x, uColorSolid.y, uColorSolid.z, texture2D(uTexture, vTexCoord).a);\n"
+    "   else \n"
     "       gl_FragColor = vec4(uColorSolid.x, uColorSolid.y, uColorSolid.z, 1);\n"
     "   \n"
     "}\n";

@@ -45,7 +45,7 @@ void visual_set_default(struct visual *visual)
 {
     visual->vertecies   = NULL;
     visual->texture     = NULL;
-    visual->model       = NULL;
+    visual->model       = &MAT4_IDENTITY;
     visual->color       = VEC3_ZERO;
 }
 void visual_draw(struct visual *visual, const mat4 *perspective)

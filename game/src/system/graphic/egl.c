@@ -128,7 +128,7 @@ static GLuint default_program;
 static GLuint default_aPos;
 static GLuint default_aTexCoord;
 static GLuint default_uMVP;
-static GLuint default_uUseTexture;
+static GLuint default_uFragMode;
 static GLuint default_uTexture;
 static GLuint default_uColorSolid;
 static void create_program()
@@ -154,9 +154,9 @@ static void create_program()
     default_aPos        = glGetAttribLocation(default_program, "aPosition");
     default_aTexCoord   = glGetAttribLocation(default_program, "aTexCoord");
     default_uMVP        = glGetUniformLocation(default_program, "uMVP");
-    default_uUseTexture = glGetUniformLocation(default_program, "uUseTexture");
+    default_uFragMode   = glGetUniformLocation(default_program, "uFragMode");
     default_uTexture    = glGetUniformLocation(default_program, "uTexture");
-    default_uColorSolid    = glGetUniformLocation(default_program, "uColorSolid");
+    default_uColorSolid = glGetUniformLocation(default_program, "uColorSolid");
     glUseProgram(default_program);
 
     glEnable(GL_BLEND);
@@ -170,12 +170,15 @@ static void on_graphic_ready()
 struct graphic_texture {
     GLuint  gltex;
     float   width, height;
+    char    is_mask;
 };
-struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap)
+struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap, char is_mask)
 {
     struct graphic_texture *texture = malloc(sizeof(struct graphic_texture));
     if (!texture)
         return NULL;
+
+    texture->is_mask = is_mask;
 
     texture->width = width;
     texture->height = height;
@@ -245,7 +248,7 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
         glUniform1i(default_uTexture, 0);
     }
 
-    glUniform1i(default_uUseTexture, texture != NULL);
+    glUniform1i(default_uFragMode, texture != NULL ? ( texture->is_mask ? FRAG_MODE_TEXTURE_MASK : FRAG_MODE_TEXTURE) : FRAG_MODE_COLOR);
     glUniform3f(default_uColorSolid, color.x, color.y, color.z);
     glUniformMatrix4fv(default_uMVP, 1, GL_TRUE, mvp.m[0]);
 

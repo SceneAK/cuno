@@ -25,7 +25,7 @@ struct graphic_vertecies;
 
 struct graphic_texture;
 
-struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap);
+struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap, char texture_mask);
 
 void graphic_texture_destroy(struct graphic_texture *texture);
 

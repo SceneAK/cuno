@@ -58,7 +58,7 @@ struct object_interactable {
     struct transform  *transf;
     struct hitrect     hitrect;
 };
-static struct object_interactable interactable;
+static struct object_interactable act_button;
 struct object_card {
     size_t          card_id;
     struct object   main;
@@ -74,39 +74,46 @@ static void object_card_init(struct object_card *obj_card, const struct card *ca
     obj_card->main.transf = transform_pool_request(&transform_pool);
     obj_card->main.visual = visual_pool_request(&visual_pool_persp);
     transform_set_default(obj_card->main.transf);
+    obj_card->main.transf->scale        = vec3_create(2, 2, 2);
+    obj_card->main.visual->model        = &obj_card->main.transf->matrix;
     obj_card->main.visual->vertecies    = card_vertecies;
     obj_card->main.visual->texture      = NULL;
     obj_card->main.visual->color        = card_color_to_rgb(card->color);
 
-    obj_card->text.visual = visual_pool_request(&visual_pool_persp);
     obj_card->text.transf = transform_pool_request(&transform_pool);
-    obj_card->text.visual->texture      = font_texture;
-    obj_card->text.transf->scale        = vec3_create(0.5f, 0.5f, 0.5f);
+    obj_card->text.visual = visual_pool_request(&visual_pool_persp);
+    transform_set_default(obj_card->text.transf);
+    visual_set_default(obj_card->text.visual);
+    obj_card->text.transf->scale        = vec3_create(0.014f, 0.014f, 0.014f);
     obj_card->text.transf->parent       = obj_card->main.transf;
+    obj_card->text.visual->model        = &obj_card->text.transf->matrix;
+    obj_card->text.visual->texture      = font_texture;
+    obj_card->text.visual->color        = card->color == BLACK ? VEC3_ONE : VEC3_ZERO;
 
     switch (card->type) { /* should cache verts */
         case NUMBER:
             snprintf(temp, 8, "[ %i ]", card->num);
+            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
             obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, temp);
             break;
         case REVERSE:
-            obj_card->text.transf->trans        = vec3_create(-0.05, 0, 0);
+            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
             obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ <=> ]");
             break;
         case SKIP:
-            obj_card->text.transf->trans        = vec3_create(-0.03, 0, 0);
+            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
             obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ >> ]");
             break;
         case PLUS2:
-            obj_card->text.transf->trans        = vec3_create(-0.03, 0, 0);
+            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
             obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +2 ]");
             break;
         case PICK_COLOR:
-            obj_card->text.transf->trans        = vec3_create(-0.1, 0, 0);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK_COLOR ]");
+            obj_card->text.transf->trans        = vec3_create(-0.95, 0, 0.1f);
+            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK ]");
             break;
         case PLUS4:
-            obj_card->text.transf->trans        = vec3_create(-0.03, 0, 0);
+            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
             obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +4 ]");
             break;
         default:
@@ -135,22 +142,24 @@ struct object_player {
 };
 static struct object_player object_players[2];
 
-static void object_player_add_card(struct object_player *pv, struct card *cards, int amount)
+static void object_player_add_cards(struct object_player *pv, const struct card *cards, int amount)
 {
     struct object_card *appended;
-    struct transform   *main_transf;
+    float dist = 0;
     int i;
 
-    pv->objcard_dist = 0.3f;
+    pv->objcard_dist = 3.5f;
 
     appended = object_card_list_append_empty(&pv->objcard_list, amount);
     for (i = 0; i < amount; i++) {
-        /* main_transf          = object_card_init(appended + i, cards + i); */
-        main_transf->parent     = pv->transf;
-        main_transf->synced     = 0;
+        object_card_init(appended + i, cards + i);
+        (appended + i)->main.transf->parent     = pv->transf;
+        (appended + i)->main.transf->trans      = vec3_create(dist + pv->objcard_dist * i, 0, 0);
+        (appended + i)->main.transf->rot        = vec3_create(0, -PI/12, 0);
+        (appended + i)->main.transf->synced     = 0;
     }
 }
-static void object_player_remove_card(size_t *card_ids, int amount);
+static void object_player_remove_cards(size_t *card_ids, int amount);
 
 static int resources_init(struct graphic_session *created_session)
 {
@@ -169,7 +178,7 @@ static int resources_init(struct graphic_session *created_session)
     font_default = create_ascii_baked_font(buffer);
     asset_close(handle);
 
-    font_texture    = graphic_texture_create(font_default.width, font_default.height, font_default.bitmap);
+    font_texture    = graphic_texture_create(font_default.width, font_default.height, font_default.bitmap, 1);
     card_vertecies  = graphic_vertecies_create(CARD_VERTS_RAW, 6);
 
     perspective  = mat4_perspective(DEG_TO_RAD(FOV_DEG), aspect_ratio, NEAR);
@@ -180,40 +189,43 @@ static int resources_init(struct graphic_session *created_session)
 
 static void objects_init()
 {
-/*  object_players[0].transf = transform_pool_request(&transform_pool);
+    object_players[0].transf = transform_pool_request(&transform_pool);
     transform_set_default(object_players[0].transf);
 
-    object_players[0].transf->trans     = vec3_create(0, 7, -10);  
-    object_players[0].transf->rot       = vec3_create(-PI/8, 0, 0); 
+    object_players[0].transf->trans     = vec3_create(-4.5f, -6, -10);
+    object_players[0].transf->rot       = vec3_create(-PI/8, 0, 0);
+    object_players[0].transf->scale     = vec3_create(0.4, 0.4, 0.4); 
     object_players[0].transf->synced    = 0;
+    object_player_add_cards(object_players + 0, game_state->players[0].hand.elements, game_state->players[0].hand.len);
 
 
     object_players[1].transf = transform_pool_request(&transform_pool);
     transform_set_default(object_players[1].transf);
 
-    object_players[1].transf->trans     = vec3_create(0, -7, -10); 
+    object_players[1].transf->trans     = vec3_create(-4.5f, 6, -10);
     object_players[1].transf->rot       = vec3_create(PI/8, 0, 0); 
-    object_players[1].transf->synced    = 0; */
+    object_players[1].transf->scale     = vec3_create(0.3, 0.3, 0.3);
+    object_players[1].transf->synced    = 0;
 
 
-    interactable.transf  = transform_pool_request(&transform_pool);
-    interactable.visual  = visual_pool_request(&visual_pool_ortho);
-    transform_set_default(interactable.transf);
-    visual_set_default(interactable.visual);
-    hitrect_set_default(&interactable.hitrect);
+    act_button.transf  = transform_pool_request(&transform_pool);
+    act_button.visual  = visual_pool_request(&visual_pool_ortho);
+    transform_set_default(act_button.transf);
+    visual_set_default(act_button.visual);
+    hitrect_set_default(&act_button.hitrect);
 
-    interactable.transf->trans          = vec3_create(-80, 80, -1);
-    interactable.transf->rot            = vec3_create(0, 0, PI/16);
-    interactable.transf->scale          = vec3_create(100, 100, 1);
-    interactable.transf->synced         = 0;
+    act_button.transf->trans          = vec3_create(0, -900, -1);
+    act_button.transf->rot            = vec3_create(0, 0, PI/4);
+    act_button.transf->scale          = vec3_create(100, 50, 1);
+    act_button.transf->synced         = 0;
 
-    interactable.visual->vertecies      = card_vertecies;
-    interactable.visual->color          = vec3_create(0, 0.5, 1);
-    interactable.visual->model          = &interactable.transf->matrix;
+    act_button.visual->vertecies      = card_vertecies;
+    act_button.visual->color          = vec3_create(1, 0.321568627, 0.760784314);
+    act_button.visual->model          = &act_button.transf->matrix;
 
-    interactable.hitrect.transf         = interactable.transf;
-    interactable.hitrect.rect           = CARD_BOUNDS;
-    interactable.hitrect.rect_type      = RECT_ORTHOSPACE;
+    act_button.hitrect.transf         = act_button.transf;
+    act_button.hitrect.rect           = CARD_BOUNDS;
+    act_button.hitrect.rect_type      = RECT_ORTHOSPACE;
 }
 
 static void render()
@@ -231,7 +243,7 @@ int game_init(struct graphic_session *created_session)
 {
     const int PLAYER_AMOUNT     = 2;
     const int DEAL_PER_PLAYER   = 4;
-    const int COMP_INITIAL      = 16;
+    const int COMP_INITIAL      = 32;
 
     if (!resources_init(created_session))
         return -1;
@@ -254,8 +266,8 @@ void game_mouse_event(struct mouse_event event)
     vec3 mouse_camspace_ray = ndc_to_camspace(aspect_ratio, DEG_TO_RAD(FOV_DEG), mouse_ndc, -10);
     vec2 mouse_orthospace   = ndc_to_orthospace(ORTHO_WIDTH, ortho_height, mouse_ndc);
 
-    if (event.type == MOUSE_DOWN && hitrect_check_hit(&interactable.hitrect, &mouse_orthospace, &mouse_camspace_ray))
-        clear_color.x = clear_color.x ? 0 : 1;
+    if (event.type == MOUSE_DOWN && hitrect_check_hit(&act_button.hitrect, &mouse_orthospace, &mouse_camspace_ray))
+        object_player_add_cards(object_players + 1, game_state->players[1].hand.elements, game_state->players[1].hand.len);
 }
 void game_update()
 {
