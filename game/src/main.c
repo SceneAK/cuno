@@ -6,7 +6,6 @@
 #include "game_math.h"
 #include "game_logic.h"
 #include "component.h"
-#include "utils.h"
 #include "main.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
@@ -44,127 +43,129 @@ static vec3                         clear_color = VEC3_ONE;
 static mat4                         perspective;
 static mat4                         orthographic;
 
-/* RESOURCES - COMPONENT POOLS */
-static struct transform_pool   transform_pool;
-static struct visual_pool      visual_pool_ortho, visual_pool_persp;
+static struct entity_system         entity_system;
 
 /* OBJECTS */
-struct object {
-    struct visual     *visual;
-    struct transform  *transf;
-};
-struct object_interactable {
-    struct visual     *visual;
-    struct transform  *transf;
-    struct hitrect     hitrect;
-};
-static struct object_interactable act_button;
-struct object_card {
-    size_t          card_id;
-    struct object   main;
-    struct object   text;
-};
-static void object_card_init(struct object_card *obj_card, const struct card *card)
+static entity_t act_button;
+
+static entity_t entity_card_create(const struct card *card)
 {
-    char temp[8];
-    const float LINE_HEIGHT = 0.5f;
+    char                   temp[8];
+    const float            LINE_HEIGHT = 0.5f,
+                           TEXT_Z = 0.5f;
+    struct comp_transform *transf;
+    struct comp_visual    *visual;
+    card_id_t             *card_id;
+    entity_t               main,
+                           text;
 
-    obj_card->card_id = card->id;
+    main    = entity_system_activate_new(&entity_system);
+    transf  = comp_transform_pool_emplace(&entity_system.transforms, main);
+    visual  = comp_visual_pool_emplace(&entity_system.visuals_persp, main);
+    card_id = comp_card_pool_emplace(&entity_system.cards, main);
+    comp_transform_set_default(transf);
+    comp_visual_set_default(visual);
+    transf->scale        = vec3_create(2, 2, 2);
+    transf->synced       = 0;
+    visual->vertecies    = card_vertecies;
+    visual->texture      = NULL;
+    visual->color        = card_color_to_rgb(card->color);
 
-    obj_card->main.transf = transform_pool_request(&transform_pool);
-    obj_card->main.visual = visual_pool_request(&visual_pool_persp);
-    transform_set_default(obj_card->main.transf);
-    obj_card->main.transf->scale        = vec3_create(2, 2, 2);
-    obj_card->main.visual->model        = &obj_card->main.transf->matrix;
-    obj_card->main.visual->vertecies    = card_vertecies;
-    obj_card->main.visual->texture      = NULL;
-    obj_card->main.visual->color        = card_color_to_rgb(card->color);
+    text   = entity_system_activate_new(&entity_system);
+    transf = comp_transform_pool_emplace(&entity_system.transforms, text);
+    visual = comp_visual_pool_emplace(&entity_system.visuals_persp, text);
+    comp_transform_set_default(transf);
+    comp_visual_set_default(visual);
+    transf->scale        = vec3_create(0.014f, 0.014f, 0.014f);
+    visual->texture      = font_texture;
+    visual->color        = card->color == BLACK ? VEC3_ONE : VEC3_ZERO;
+    visual->draw_pass    = 1;
 
-    obj_card->text.transf = transform_pool_request(&transform_pool);
-    obj_card->text.visual = visual_pool_request(&visual_pool_persp);
-    transform_set_default(obj_card->text.transf);
-    visual_set_default(obj_card->text.visual);
-    obj_card->text.transf->scale        = vec3_create(0.014f, 0.014f, 0.014f);
-    obj_card->text.transf->parent       = obj_card->main.transf;
-    obj_card->text.visual->model        = &obj_card->text.transf->matrix;
-    obj_card->text.visual->texture      = font_texture;
-    obj_card->text.visual->color        = card->color == BLACK ? VEC3_ONE : VEC3_ZERO;
+    entity_system.parent_map[text] = main;
+    entity_system.first_child_map[main] = text;
 
     switch (card->type) { /* should cache verts */
         case NUMBER:
             snprintf(temp, 8, "[ %i ]", card->num);
-            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, temp);
+            transf->trans        = vec3_create(-0.645, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, temp);
             break;
         case REVERSE:
-            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ <=> ]");
+            transf->trans        = vec3_create(-0.645, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ <=> ]");
             break;
         case SKIP:
-            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ >> ]");
+            transf->trans        = vec3_create(-0.645, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ >> ]");
             break;
         case PLUS2:
-            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +2 ]");
+            transf->trans        = vec3_create(-0.645, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +2 ]");
             break;
         case PICK_COLOR:
-            obj_card->text.transf->trans        = vec3_create(-0.95, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK ]");
+            transf->trans        = vec3_create(-0.95, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK ]");
             break;
         case PLUS4:
-            obj_card->text.transf->trans        = vec3_create(-0.645, 0, 0.1f);
-            obj_card->text.visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +4 ]");
+            transf->trans        = vec3_create(-0.645, 0, TEXT_Z);
+            visual->vertecies    = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +4 ]");
             break;
         default:
-            obj_card->text.visual->vertecies = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ ??? ]");
+            visual->vertecies = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ ??? ]");
             break;
     }
+    transf->synced = 0;
 
-    obj_card->main.transf->synced = 0;
-    obj_card->text.transf->synced = 0;
+    return main;
 }
-static void object_card_cleanup(struct object_card *obj_card)
-{
-    transform_pool_return(&transform_pool, obj_card->main.transf);
-    visual_pool_return(&visual_pool_persp, obj_card->main.visual);
-
-    transform_pool_return(&transform_pool, obj_card->text.transf);
-    graphic_vertecies_destroy(obj_card->text.visual->vertecies);
-    visual_pool_return(&visual_pool_persp, obj_card->text.visual);
-}
-
-DEFINE_ARRAY_LIST_WRAPPER(static, struct object_card, object_card_list)
-struct object_player {
-    struct transform       *transf;
-    struct object_card_list objcard_list;
-    float                   objcard_dist;
-};
-static struct object_player object_players[2];
-
-static void object_player_add_cards(struct object_player *pv, const struct card *cards, int amount)
-{
-    struct object_card *appended;
-    float dist = 0;
+static void entity_card_destroy(entity_t main)
+{LOG("DESTROY CARD CALLED");
     int i;
+    entity_t text = entity_system.first_child_map[main];
+    graphic_vertecies_destroy(comp_visual_pool_try_get(&entity_system.visuals_persp, text)->vertecies);
+    entity_system_erase_via_signature(&entity_system, main, 1<<SIGN_TRANSFORM | 1<<SIGN_VISUAL_PERSP | 1<<SIGN_CARD);
+    entity_system_erase_via_signature(&entity_system, text, 1<<SIGN_TRANSFORM | 1<<SIGN_VISUAL_PERSP);
 
-    pv->objcard_dist = 3.5f;
+    entity_system.parent_map[main]      = ENTITY_INVALID;
+    entity_system.first_child_map[main] = ENTITY_INVALID;
+    entity_system.parent_map[text]      = ENTITY_INVALID;
+    entity_system_deactivate(&entity_system, main);
+    entity_system_deactivate(&entity_system, text);
+}
 
-    appended = object_card_list_append_empty(&pv->objcard_list, amount);
+static entity_t entity_players[2];
+
+static void entity_player_add_cards(entity_t player, const struct card *cards, int amount)
+{
+    const float            DIST = 6.0f;
+    entity_t               entity_card, 
+                           entity_card_last;
+    struct comp_transform *transf;
+    int                    i;
+
     for (i = 0; i < amount; i++) {
-        object_card_init(appended + i, cards + i);
-        (appended + i)->main.transf->parent     = pv->transf;
-        (appended + i)->main.transf->trans      = vec3_create(dist + pv->objcard_dist * i, 0, 0);
-        (appended + i)->main.transf->rot        = vec3_create(0, -PI/12, 0);
-        (appended + i)->main.transf->synced     = 0;
+        entity_card     = entity_card_create(cards + i);
+        transf          = comp_transform_pool_try_get(&entity_system.transforms, entity_card);
+        transf->trans   = vec3_create(DIST * i, 0, 0);
+        transf->rot     = vec3_create(0, -PI/12, 0);
+        transf->synced  = 0;
+
+        entity_system.parent_map[entity_card] = player;
+        /*if (i == 0)
+            entity_system.first_child_map[player] = entity_card;
+        else
+            entity_system.sibling_map[entity_card_last] = entity_card;
+
+        entity_card_last = entity_card; */
     }
 }
-static void object_player_remove_cards(size_t *card_ids, int amount);
+static void entity_player_remove_cards(size_t *card_ids, int amount);
 
 static int resources_init(struct graphic_session *created_session)
 {
     unsigned char       buffer[1<<19];
     asset_handle        handle;
+    int i;
 
     session = created_session;
     session_info = graphic_session_info_get(created_session);
@@ -187,53 +188,64 @@ static int resources_init(struct graphic_session *created_session)
     return 1;
 }
 
+static void components_init()
+{
+    const int COMP_INITIAL      = 32;
+
+    comp_visual_pool_init(&entity_system.visuals_persp, COMP_INITIAL);
+    comp_visual_pool_init(&entity_system.visuals_ortho, COMP_INITIAL);
+    comp_transform_pool_init(&entity_system.transforms, COMP_INITIAL);
+    comp_hitrect_pool_init(&entity_system.hitrects, COMP_INITIAL);
+    comp_card_pool_init(&entity_system.cards, COMP_INITIAL);
+}
 static void objects_init()
 {
-    object_players[0].transf = transform_pool_request(&transform_pool);
-    transform_set_default(object_players[0].transf);
+    struct comp_transform *transf;
+    struct comp_visual    *visual;
+    struct comp_hitrect   *hitrect;
 
-    object_players[0].transf->trans     = vec3_create(-4.5f, -6, -10);
-    object_players[0].transf->rot       = vec3_create(-PI/8, 0, 0);
-    object_players[0].transf->scale     = vec3_create(0.4, 0.4, 0.4); 
-    object_players[0].transf->synced    = 0;
-    object_player_add_cards(object_players + 0, game_state->players[0].hand.elements, game_state->players[0].hand.len);
-
-
-    object_players[1].transf = transform_pool_request(&transform_pool);
-    transform_set_default(object_players[1].transf);
-
-    object_players[1].transf->trans     = vec3_create(-4.5f, 6, -10);
-    object_players[1].transf->rot       = vec3_create(PI/8, 0, 0); 
-    object_players[1].transf->scale     = vec3_create(0.3, 0.3, 0.3);
-    object_players[1].transf->synced    = 0;
+    entity_players[0] = entity_system_activate_new(&entity_system);
+    transf = comp_transform_pool_emplace(&entity_system.transforms, entity_players[0]);
+    comp_transform_set_default(transf);
+    transf->trans     = vec3_create(-4.5f, -6, -10);
+    transf->rot       = vec3_create(-PI/8, 0, 0);
+    transf->scale     = vec3_create(0.4, 0.4, 0.4); 
+    transf->synced    = 0;
+    entity_player_add_cards(entity_players[0], game_state->players[0].hand.elements, game_state->players[0].hand.len);
 
 
-    act_button.transf  = transform_pool_request(&transform_pool);
-    act_button.visual  = visual_pool_request(&visual_pool_ortho);
-    transform_set_default(act_button.transf);
-    visual_set_default(act_button.visual);
-    hitrect_set_default(&act_button.hitrect);
+    entity_players[1] = entity_system_activate_new(&entity_system);
+    transf = comp_transform_pool_emplace(&entity_system.transforms, entity_players[1]);
+    comp_transform_set_default(transf);
+    transf->trans     = vec3_create(-4.5f, 6, -10);
+    transf->rot       = vec3_create(PI/8, 0, 0); 
+    transf->scale     = vec3_create(0.3, 0.3, 0.3);
+    transf->synced    = 0;
 
-    act_button.transf->trans          = vec3_create(0, -900, -1);
-    act_button.transf->rot            = vec3_create(0, 0, PI/4);
-    act_button.transf->scale          = vec3_create(100, 50, 1);
-    act_button.transf->synced         = 0;
-
-    act_button.visual->vertecies      = card_vertecies;
-    act_button.visual->color          = vec3_create(1, 0.321568627, 0.760784314);
-    act_button.visual->model          = &act_button.transf->matrix;
-
-    act_button.hitrect.transf         = act_button.transf;
-    act_button.hitrect.rect           = CARD_BOUNDS;
-    act_button.hitrect.rect_type      = RECT_ORTHOSPACE;
+    act_button = entity_system_activate_new(&entity_system);
+    transf  = comp_transform_pool_emplace(&entity_system.transforms, act_button);
+    visual  = comp_visual_pool_emplace(&entity_system.visuals_ortho, act_button);
+    hitrect = comp_hitrect_pool_emplace(&entity_system.hitrects, act_button);
+    comp_transform_set_default(transf);
+    comp_visual_set_default(visual);
+    comp_hitrect_set_default(hitrect);
+    transf->trans       = vec3_create(0, -900, -1);
+    transf->rot         = vec3_create(0, 0, PI/4);
+    transf->scale       = vec3_create(100, 50, 1);
+    transf->synced      = 0;
+    visual->vertecies   = card_vertecies;
+    visual->color       = vec3_create(1, 0.321568627, 0.760784314);
+    hitrect->rect       = CARD_BOUNDS;
+    hitrect->rect_type  = RECT_ORTHOSPACE;
+    hitrect->hitmask    = HITMASK_MOUSE_DOWN;
 }
 
 static void render()
 {
     graphic_clear(clear_color.x, clear_color.y, clear_color.z);
 
-    visual_pool_draw(&visual_pool_persp, &perspective);
-    visual_pool_draw(&visual_pool_ortho, &orthographic);
+    comp_visual_transform_pool_draw(&entity_system.visuals_persp, &entity_system.transforms, &perspective);
+    comp_visual_transform_pool_draw(&entity_system.visuals_ortho, &entity_system.transforms, &orthographic);
 
     graphic_render(session);
 }
@@ -243,7 +255,6 @@ int game_init(struct graphic_session *created_session)
 {
     const int PLAYER_AMOUNT     = 2;
     const int DEAL_PER_PLAYER   = 4;
-    const int COMP_INITIAL      = 32;
 
     if (!resources_init(created_session))
         return -1;
@@ -251,10 +262,8 @@ int game_init(struct graphic_session *created_session)
     game_state_init(&game_state_mut, PLAYER_AMOUNT);
     deal_cards(&game_state_mut, DEAL_PER_PLAYER);
 
-    visual_pool_init(&visual_pool_persp, COMP_INITIAL);
-    visual_pool_init(&visual_pool_ortho, COMP_INITIAL);
-    transform_pool_init(&transform_pool, COMP_INITIAL);
-
+    entity_system_init(&entity_system);
+    components_init();
     objects_init();
 
     return 0;
@@ -265,15 +274,27 @@ void game_mouse_event(struct mouse_event event)
     vec2 mouse_ndc          = screen_to_ndc(session_info.width, session_info.height, event.mouse_x, event.mouse_y);
     vec3 mouse_camspace_ray = ndc_to_camspace(aspect_ratio, DEG_TO_RAD(FOV_DEG), mouse_ndc, -10);
     vec2 mouse_orthospace   = ndc_to_orthospace(ORTHO_WIDTH, ortho_height, mouse_ndc);
+    unsigned char mask      = event.type == MOUSE_DOWN ? HITMASK_MOUSE_DOWN : 
+                              event.type == MOUSE_UP   ? HITMASK_MOUSE_UP   : 
+                              event.type == MOUSE_HOLD ? HITMASK_MOUSE_HOLD :
+                              HITMASK_MOUSE_HOVER;
 
-    if (event.type == MOUSE_DOWN && hitrect_check_hit(&act_button.hitrect, &mouse_orthospace, &mouse_camspace_ray))
-        object_player_add_cards(object_players + 1, game_state->players[1].hand.elements, game_state->players[1].hand.len);
+    struct comp_hitrect *hitrect;
+
+    comp_hitrect_transform_pool_update_hitstate(&entity_system.hitrects, &entity_system.transforms, &mouse_orthospace, &mouse_camspace_ray, mask);
+
+    hitrect = comp_hitrect_pool_try_get(&entity_system.hitrects, act_button);
+    if (hitrect->hitstate) {
+        entity_card_destroy(entity_system.cards.dense[0]);
+        hitrect->hitstate = 0;
+    }
+
 }
 void game_update()
 {
-    transform_pool_sync_matrix(&transform_pool);
-
+    comp_transform_pool_sync_matrices(&entity_system.transforms, entity_system.parent_map);
     if (!session)
         return;
     render();
 }
+

@@ -6,8 +6,9 @@
 
 #define IS_PICKABLE_COLOR(color) ( 0 <= (color) && (color) <= 3 )
 
+typedef unsigned short card_id_t;
 struct card {
-    size_t id;
+    card_id_t id;
     enum card_type {
         UNKNOWN = -1,
         NUMBER,
@@ -54,7 +55,7 @@ struct game_state {
 
 vec3 card_color_to_rgb(enum card_color color);
 
-int find_index(const struct player *player, size_t id);
+int find_index(const struct player *player, card_id_t id);
 
 void find_indices(int *indices, const struct player *player, size_t *ids, int len);
 

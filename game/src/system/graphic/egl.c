@@ -115,7 +115,7 @@ struct graphic_session_info graphic_session_info_get(struct graphic_session *ses
 void graphic_clear(float r, float g, float b)
 {
     glClearColor(r, g, b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void graphic_render(struct graphic_session *session)
@@ -159,6 +159,8 @@ static void create_program()
     default_uColorSolid = glGetUniformLocation(default_program, "uColorSolid");
     glUseProgram(default_program);
 
+    glEnable(GL_DEPTH_TEST);
+    
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }

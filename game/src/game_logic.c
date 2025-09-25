@@ -23,7 +23,7 @@ vec3 card_color_to_rgb(enum card_color color)
     }
 }
 
-static size_t card_count = 0;
+static card_id_t card_count = 0;
 static void rand_card(struct card *card)
 {
     const float RATIO = RAND_MAX / 110;
@@ -67,7 +67,7 @@ static void rand_cards(struct card *cards, int amount)
     }
 }
 
-int find_index(const struct player *player, size_t id)
+int find_index(const struct player *player, card_id_t id)
 {
     int i;
 
@@ -91,7 +91,7 @@ void find_indices(int *indices, const struct player *player, size_t *ids, int le
 
 static void append_cards(struct player *player, int amount)
 {
-    card_list_append_empty(&player->hand, amount);
+    card_list_append_new(&player->hand, amount);
     rand_cards(player->hand.elements + player->hand.len - amount, amount);
 }
 
@@ -156,7 +156,8 @@ void deal_cards(struct game_state *game, int deal_per_player)
     for (i = 0; i < game->player_len; i++) {
         game->players[i].id = i;
         card_list_init(&game->players[i].hand, deal_per_player);
-        rand_cards(game->players[i].hand.elements, deal_per_player);
+
+        append_cards(game->players + i, deal_per_player);
     }
 }
 
