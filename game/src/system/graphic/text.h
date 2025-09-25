@@ -14,11 +14,8 @@ struct baked_font {
     struct codepoint    *cps;
     size_t               cps_len;
 };
-
 struct baked_font create_ascii_baked_font(unsigned char *ttf);
-
 float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text);
-
 struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text);
 
 #endif

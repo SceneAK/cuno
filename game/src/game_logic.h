@@ -28,9 +28,7 @@ struct card {
     } color;
     short num;
 };
-
 DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
-
 struct player {
     short               id;
     char               *name;
@@ -54,40 +52,22 @@ struct game_state {
 };
 
 vec3 card_color_to_rgb(enum card_color color);
-
 int find_index(const struct player *player, card_id_t id);
-
 void find_indices(int *indices, const struct player *player, size_t *ids, int len);
 
-
 void game_state_init(struct game_state *game, int player_len);
-
-void deal_cards(struct game_state *game, int deal_per_player);
-
-
 int is_legal_draw(const struct game_state *game);
-
-int act_draw_cards(struct game_state *game, size_t *amount_drawn);
-
-
 int is_legal_play(const struct game_state *game, const size_t *indices, int len);
-
+int act_draw_cards(struct game_state *game, size_t *amount_drawn);
 int act_play_card(struct game_state *game, const size_t *indices, int len);
-
-
 int end_turn(struct game_state *game);
 
 int supersmartAI_act(struct game_state *game);
 
-
 const char *card_type_to_str(enum card_type card_type);
-
 const char *card_color_to_str(enum card_color color);
-
 void log_card(const struct card *card);
-
 void log_hand(const struct player *player);
-
 void log_game_state(const struct game_state *game);
 
 #endif

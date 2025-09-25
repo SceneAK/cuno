@@ -144,7 +144,6 @@ enum entity_system_signature {
 
     SIGN_CARD
 };
-/* Because components don't really change/move around much */
 static void entity_system_erase_via_signature(struct entity_system *system, entity_t entity, unsigned int es_signature) 
 {
     if (es_signature & 1<<SIGN_TRANSFORM)
