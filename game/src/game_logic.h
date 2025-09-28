@@ -46,8 +46,7 @@ struct game_state {
     } acted;
 
     struct card     top_card;
-    int             turn_dir;
-    int             skip_pool;
+    int             turn_dir;    int             skip_pool;
     int             batsu_pool;
 };
 
@@ -56,6 +55,7 @@ int find_index(const struct player *player, card_id_t id);
 void find_indices(int *indices, const struct player *player, size_t *ids, int len);
 
 void game_state_init(struct game_state *game, int player_len);
+void deal_cards(struct game_state *game, int deal_per_player);
 int is_legal_draw(const struct game_state *game);
 int is_legal_play(const struct game_state *game, const size_t *indices, int len);
 int act_draw_cards(struct game_state *game, size_t *amount_drawn);

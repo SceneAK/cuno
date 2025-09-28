@@ -24,6 +24,10 @@ void component_pool_deinit(struct component_pool *pool)
 }
 void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_t elem_size)
 {
+    if (entity_is_invalid(entity)) {
+        LOG("COMP: (warn) Entity invalid");
+        return NULL;
+    }
     if (pool->sparse[entity] != COMP_INDEX_INVALID) {
         LOG("COMP: (warn) Component for this entity already exists. Cannot emplace.");
         return NULL;
@@ -43,9 +47,13 @@ int component_pool_erase(struct component_pool *pool, entity_t entity, size_t el
 {
     entity_t last_entity;
 
-    if (pool->sparse[entity] == COMP_INDEX_INVALID) {
-        LOG("COMPONENT: (warn) Component for this entity doesn't exist. Cannot erase.");
+    if (entity_is_invalid(entity)) {
+        LOG("COMP: (warn) Entity invalid");
         return -1;
+    }
+    if (pool->sparse[entity] == COMP_INDEX_INVALID) {
+        LOG("COMP: (warn) Component for this entity doesn't exist. Cannot erase.");
+        return -2;
     }
 
     last_entity = pool->dense[--pool->len];
@@ -70,15 +78,38 @@ void comp_transform_set_default(struct comp_transform *transf)
     transf->matrix          = MAT4_IDENTITY;
     transf->matrix_version  = 0;
 }
+void comp_transform_system_mark_family_desync(struct comp_transform_system *system, entity_t family_parent)
+{
+    entity_t               child;
+    struct comp_transform *transf;
 
+    if (entity_is_invalid(family_parent)) {
+        LOG("COMP_TRANSF: (warn) Entity invalid");
+        return;
+    }
+
+    child = system->first_child_map[family_parent];
+    transf = comp_transform_pool_try_get(&system->pool, family_parent);
+    if (transf)
+        transf->synced = 0;
+     
+    while (!entity_is_invalid(child)) {
+        transf = comp_transform_pool_try_get(&system->pool, child);
+        if (transf)
+            transf->synced = 0;
+
+        child = system->sibling_map[child];
+    }
+}
 /* Should probably sort instead or maybe separate the matrices into their own array, but I can't be bothered lmao */
-void comp_transform_pool_sync_matrices(struct comp_transform_pool *pool, entity_t *parent_map)
+void comp_transform_system_sync_matrices(struct comp_transform_system *system)
+
 {
     unsigned short i;
     struct comp_transform *transf, *parent_transf;
 
-    for (i = 0; i < pool->len; i++) { 
-        transf = pool->data + i;
+    for (i = 0; i < system->pool.len; i++) { 
+        transf = system->pool.data + i;
         if (!transf)
             continue;
 
@@ -87,7 +118,7 @@ void comp_transform_pool_sync_matrices(struct comp_transform_pool *pool, entity_
 
         transf->matrix = mat4_trs(transf->trans, transf->rot, transf->scale);
 
-        parent_transf = comp_transform_pool_try_get(pool, parent_map[pool->dense[i]]);
+        parent_transf = comp_transform_pool_try_get(&system->pool, system->parent_map[system->pool.dense[i]]);
         if (parent_transf)
             transf->matrix = mat4_mult(parent_transf->matrix, transf->matrix);
 
@@ -98,14 +129,14 @@ void comp_transform_pool_sync_matrices(struct comp_transform_pool *pool, entity_
 
 
 /* VISUAL */
-void comp_visual_set_default(struct comp_visual *comp_visual)
+void comp_visual_set_default(struct comp_visual *visual)
 {
-    comp_visual->vertecies   = NULL;
-    comp_visual->texture     = NULL;
-    comp_visual->color       = VEC3_ZERO;
-    comp_visual->draw_pass  = 0;
+    visual->vertecies       = NULL;
+    visual->texture         = NULL;
+    visual->color           = VEC3_ZERO;
+    visual->draw_pass       = 0;
 }
-void comp_visual_transform_pool_draw(struct comp_visual_pool *vis_pool, struct comp_transform_pool *transf_pool, const mat4 *perspective)
+static void comp_visual_transform_pool_draw(struct comp_visual_pool *pool, struct comp_transform_pool *transf_pool, const mat4 *projection)
 {
     struct comp_visual    *visual;
     struct comp_transform *transf;
@@ -113,13 +144,10 @@ void comp_visual_transform_pool_draw(struct comp_visual_pool *vis_pool, struct c
                            total_pass = 1;
     int i;
 
-    if (!perspective)
-        return;
-
     for(; pass < total_pass; pass++) {
-        for (i = 0; i < vis_pool->len; i++) {
-            visual = vis_pool->data + i;
-            transf = comp_transform_pool_try_get(transf_pool, vis_pool->dense[i]);
+        for (i = 0; i < pool->len; i++) {
+            visual = pool->data + i;
+            transf = comp_transform_pool_try_get(transf_pool, pool->dense[i]);
 
             if (visual->draw_pass > pass) {
                 total_pass = visual->draw_pass + 1;
@@ -128,11 +156,16 @@ void comp_visual_transform_pool_draw(struct comp_visual_pool *vis_pool, struct c
 
             graphic_draw(visual->vertecies, 
                          visual->texture, 
-                         mat4_mult(*perspective, transf ? transf->matrix : MAT4_IDENTITY),
+                         mat4_mult(*projection, transf ? transf->matrix : MAT4_IDENTITY),
                          visual->color);
 
         }
     }
+}
+void comp_visual_system_draw(struct comp_visual_system *vis_sys, const mat4 *persp, const mat4 *ortho)
+{
+    comp_visual_transform_pool_draw(&vis_sys->pool_ortho, vis_sys->transf_pool, ortho);
+    comp_visual_transform_pool_draw(&vis_sys->pool_persp, vis_sys->transf_pool, persp);
 }
 
 /* HITRECT */
@@ -146,16 +179,15 @@ void comp_hitrect_set_default(struct comp_hitrect *hitrect)
     hitrect->hitstate           = 0;
     hitrect->hitmask            = 1;
 }
-void comp_hitrect_transform_pool_update_hitstate(struct comp_hitrect_pool *hitrect_pool, struct comp_transform_pool *transf_pool, 
-                                                 const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask)
+void comp_hitrect_system_update_hitstate(struct comp_hitrect_system *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask)
 {
     struct comp_hitrect *hitrect;
     struct comp_transform *transf;
     int i;
 
-    for (i = 0; i < hitrect_pool->len; i++) {
-        hitrect = hitrect_pool->data + i;
-        transf  = transf_pool->data + transf_pool->sparse[hitrect_pool->dense[i]];
+    for (i = 0; i < system->pool.len; i++) {
+        hitrect = system->pool.data + i;
+        transf  = system->transf_pool->data + system->transf_pool->sparse[system->pool.dense[i]];
 
         if (!transf | !(hitrect->hitmask & mask))
             continue;
