@@ -51,8 +51,8 @@ struct game_state {
 };
 
 vec3 card_color_to_rgb(enum card_color color);
-int find_index(const struct player *player, card_id_t id);
-void find_indices(int *indices, const struct player *player, size_t *ids, int len);
+int card_find_index(const struct player *player, card_id_t id);
+void cards_find_indices(int *indices, const struct player *player, size_t *ids, int len);
 
 void game_state_init(struct game_state *game, int player_len);
 void deal_cards(struct game_state *game, int deal_per_player);
@@ -66,8 +66,8 @@ int supersmartAI_act(struct game_state *game);
 
 const char *card_type_to_str(enum card_type card_type);
 const char *card_color_to_str(enum card_color color);
-void log_card(const struct card *card);
-void log_hand(const struct player *player);
-void log_game_state(const struct game_state *game);
+size_t log_card(char *buffer, size_t buffer_len, const struct card *card);
+size_t log_hand(char *buffer, size_t buffer_len, const struct player *player);
+size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game);
 
 #endif

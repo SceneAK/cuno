@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "system/logging.h"
 #include "game_logic.h"
 #include "game_math.h"
@@ -67,7 +68,7 @@ static void rand_cards(struct card *cards, int amount)
     }
 }
 
-int find_index(const struct player *player, card_id_t id)
+int card_find_index(const struct player *player, card_id_t id)
 {
     int i;
 
@@ -78,7 +79,7 @@ int find_index(const struct player *player, card_id_t id)
     return -1;
 }
 
-void find_indices(int *indices, const struct player *player, size_t *ids, int len)
+void cards_find_indices(int *indices, const struct player *player, size_t *ids, int len)
 {
     int i, j, indices_index = 0;
 
@@ -235,9 +236,9 @@ int act_play_card(struct game_state *game, const size_t *indices, int len)
         last_card = (struct card *)player->hand.elements + indices[i];
         play_card_effect(game, last_card, RED);
     }
-
     game->top_card = *last_card;
     game->acted = PLAY;
+
     remove_cards(player, indices, len);
     return 0;
 }
@@ -338,37 +339,49 @@ const char *card_color_to_str(enum card_color color)
     }
 }
 
-void log_card(const struct card *card)
+size_t log_card(char *buffer, size_t buffer_len, const struct card *card)
 {
     const char *card_type = card_type_to_str(card->type);
     const char *card_color = card_color_to_str(card->color);
     if (card->type == NUMBER)
-        LOGF("card [%s] (%s) (%i)", card_type, card_color, card->num);
+        return snprintf(buffer, buffer_len, "card(%d) [%s] (%s) (%i)\n", card->id, card_type, card_color, card->num);
     else 
-        LOGF("card [%s] (%s)", card_type, card_color);
+        return snprintf(buffer, buffer_len, "card(%d) [%s] (%s)\n",card->id, card_type, card_color);
 }
-void log_hand(const struct player *player)
+size_t log_hand(char *buffer, size_t buffer_len, const struct player *player)
 {
     int i;
+    size_t total = 0;
     
     for (i = 0; i < player->hand.len; i++) {
-        log_card(player->hand.elements + i);
+        total += log_card(buffer + total, buffer_len - total, player->hand.elements + i);
     }
-    LOGF("Total of %lu cards", player->hand.len);
+    total += snprintf(buffer + total, buffer_len - total, "Total of %lu cards\n", player->hand.len);
+    return total;
 }
-void log_game_state(const struct game_state *game)
+size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game)
 {
     int i;
-    LOGF(" - ended: %i", game->ended);
-    LOGF(" - acted: %i", game->acted);
-    LOGF(" - turn_dir: %i", game->turn_dir);
-    LOGF(" - skip_pool: %i", game->skip_pool);
-    LOGF(" - batsu_pool: %i", game->batsu_pool);
-    LOGF(" - active_player_index: %i", game->active_player_index);
-    LOG(" - top_card:");
-    log_card(&game->top_card);
+    size_t total;
+
+    total = snprintf(buffer, buffer_len, 
+        "GAME_STATE"
+        " - ended: %i\n"
+        " - acted: %i\n"
+        " - turn_dir: %i\n"
+        " - skip_pool: %i\n"
+        " - batsu_pool: %i\n"
+        " - active_player_index: %i\n",
+        game->ended,
+        game->acted,
+        game->turn_dir,
+        game->skip_pool,
+        game->batsu_pool,
+        game->active_player_index);
+    total += log_card(buffer + total, buffer_len - total, &game->top_card);
     for (i = 0; i < game->player_len; i++) {
-        LOGF("players[%i]:", i);
-        log_hand(game->players + i);
+        total += snprintf(buffer + total, buffer_len - total, "player [%i]:\n", i);
+        total += log_hand(buffer + total, buffer_len - total, game->players + i);
     }
+    return total;
 }

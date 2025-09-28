@@ -186,7 +186,10 @@ static entity_t entity_system_activate_new(struct entity_system *ent_system)
 }
 static void entity_system_deactivate(struct entity_system *ent_system, entity_t entity)
 {
-    ent_system->active[entity] = 0;
+    ent_system->parent_map[entity]      = ENTITY_INVALID;
+    ent_system->sibling_map[entity]     = ENTITY_INVALID;
+    ent_system->first_child_map[entity] = ENTITY_INVALID;
+    ent_system->active[entity]          = 0;
 }
 enum entity_system_signature {
     SIGN_TRANSFORM,
@@ -209,6 +212,82 @@ static void entity_system_erase_via_signature(struct entity_system *ent_system, 
 
     if (es_signature & 1<<SIGN_CARD)
         card_id_pool_erase(&ent_system->cards, entity);
+}
+static size_t entity_system_count_children(struct entity_system *ent_system, entity_t entity)
+{
+    size_t      count = 0;
+    entity_t    current;
+
+    if (entity_is_invalid(entity))
+        return SIZE_MAX;
+
+    current = ent_system->first_child_map[entity];
+    while (!entity_is_invalid(current)) {
+        count++;
+        current = ent_system->sibling_map[current];
+    }
+
+    return count;
+}
+static entity_t entity_system_find_previous_sibling(struct entity_system *ent_system, entity_t entity)
+{
+    entity_t current,
+             last = ENTITY_INVALID;
+
+    if (entity_is_invalid(ent_system->parent_map[entity]))
+        return -1;
+    current = ent_system->first_child_map[ ent_system->parent_map[entity] ];
+
+    while (!entity_is_invalid(current)) {
+        if (current == entity)
+            break;
+
+        last = current;
+        current = ent_system->sibling_map[current];
+    }
+    return last;
+}
+static entity_t entity_system_find_last_child(struct entity_system *ent_system, entity_t parent)
+{
+    entity_t current;
+
+    if (entity_is_invalid(parent))
+        return ENTITY_INVALID;
+
+    current = ent_system->first_child_map[parent];
+    if (entity_is_invalid(current))
+        return ENTITY_INVALID;
+
+    while (!entity_is_invalid(ent_system->sibling_map[current])) {
+        current = ent_system->sibling_map[current];
+    }
+    return current;
+}
+static void entity_system_parent(struct entity_system *ent_system, entity_t parent, entity_t entity)
+{
+    ent_system->parent_map[entity] = parent;
+    if (entity_is_invalid(ent_system->first_child_map[parent]))
+        ent_system->first_child_map[parent] = entity;
+    else
+        ent_system->sibling_map[entity_system_find_last_child(ent_system, parent)] = entity;
+}
+static int entity_system_unparent(struct entity_system *ent_system, entity_t entity)
+{
+    entity_t prev; 
+
+    if (entity_is_invalid(ent_system->parent_map[entity]))
+        return -1;
+
+    prev = entity_system_find_previous_sibling(ent_system, entity);
+    if (entity_is_invalid(prev))
+        ent_system->first_child_map[ ent_system->parent_map[entity] ] = ent_system->sibling_map[entity];
+    else 
+        ent_system->sibling_map[prev] = ent_system->sibling_map[entity];
+
+    ent_system->parent_map[entity]  = ENTITY_INVALID;
+    ent_system->sibling_map[entity] = ENTITY_INVALID;
+
+    return 0;
 }
 
 #endif

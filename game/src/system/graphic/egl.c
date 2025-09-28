@@ -2,7 +2,6 @@
 #include <EGL/egl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include "system/graphic/graphic.h"
 #include "system/graphic/glutil.h"
 #include "system/graphic/glres.h"
@@ -77,6 +76,7 @@ int graphic_session_destroy(struct graphic_session *session)
     eglDestroySurface(session->display, session->surface);
     eglDestroyContext(session->display, session->context);
     eglTerminate(session->display);
+    free(session);
     return 0;
 }
 

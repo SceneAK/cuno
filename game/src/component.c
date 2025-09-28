@@ -102,29 +102,34 @@ void comp_transform_system_mark_family_desync(struct comp_transform_system *syst
     }
 }
 /* Should probably sort instead or maybe separate the matrices into their own array, but I can't be bothered lmao */
+static void comp_transform_system_sync_matrix(struct comp_transform_system *system, size_t data_index)
+{
+    struct comp_transform *transf, *parent_transf;
+
+    transf = system->pool.data + data_index;
+
+    if (transf->synced)
+        return;
+
+    transf->matrix = mat4_trs(transf->trans, transf->rot, transf->scale);
+
+    parent_transf = comp_transform_pool_try_get(&system->pool, system->parent_map[system->pool.dense[data_index]]);
+    if (parent_transf) {
+        comp_transform_system_sync_matrix(system, (parent_transf - system->pool.data));
+        transf->matrix = mat4_mult(parent_transf->matrix, transf->matrix);
+    }
+
+    transf->matrix_version++;
+    transf->synced = 1;
+}
 void comp_transform_system_sync_matrices(struct comp_transform_system *system)
 
 {
-    unsigned short i;
+    int i;
     struct comp_transform *transf, *parent_transf;
 
-    for (i = 0; i < system->pool.len; i++) { 
-        transf = system->pool.data + i;
-        if (!transf)
-            continue;
-
-        if (transf->synced)
-            continue;
-
-        transf->matrix = mat4_trs(transf->trans, transf->rot, transf->scale);
-
-        parent_transf = comp_transform_pool_try_get(&system->pool, system->parent_map[system->pool.dense[i]]);
-        if (parent_transf)
-            transf->matrix = mat4_mult(parent_transf->matrix, transf->matrix);
-
-        transf->matrix_version++;
-        transf->synced = 1;
-    }
+    for (i = 0; i < system->pool.len; i++)
+        comp_transform_system_sync_matrix(system, i);
 }
 
 

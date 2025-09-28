@@ -53,9 +53,10 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     for (i = 0; i < len; i++) {
         if (indices[i] >= list->len - len)
             continue;
+
         do swap_index--;
         while (marked[swap_index]);
-        memcpy((char *)list->elements + i * elem_size, (char *)list->elements + swap_index * elem_size, elem_size);
+        memcpy((char *)list->elements + indices[i] * elem_size, (char *)list->elements + swap_index * elem_size, elem_size);
     }
     list->len -= len;
     free(marked);
