@@ -116,11 +116,11 @@ void graphic_clear(float r, float g, float b)
 {
     glClearColor(r, g, b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glFlush();
 }
 
 void graphic_render(struct graphic_session *session)
 {
-    glFlush();
     eglSwapBuffers(session->display, session->surface);
 }
 
@@ -190,6 +190,7 @@ struct graphic_texture *graphic_texture_create(float width, float height, const 
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFlush();
 
     return texture;
 }
@@ -214,6 +215,7 @@ struct graphic_vertecies *graphic_vertecies_create(const float *verts, size_t ve
     glGenBuffers(1, &vertecies->glvbo);
     glBindBuffer(GL_ARRAY_BUFFER, vertecies->glvbo);
     glBufferData(GL_ARRAY_BUFFER, VERT_SIZE*(vert_count), verts, GL_STATIC_DRAW);
+    glFlush();
 
     return vertecies;
 }
@@ -255,6 +257,7 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
     glUniformMatrix4fv(default_uMVP, 1, GL_TRUE, mvp.m[0]);
 
     glDrawArrays(GL_TRIANGLES, 0, vertecies->vert_count);
+    glFlush();
 }
 
 /* Utils */

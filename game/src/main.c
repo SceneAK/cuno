@@ -267,11 +267,11 @@ static entity_t entity_player_create(struct player *player)
 }
 static void change_debug_text(const char* str)
 {
-    struct comp_visual      *visual;
+    struct comp_visual *visual;
     visual = comp_visual_pool_try_get(&entity_system.visual_sys.pool_ortho, entity_debug_text);
     if (visual->vertecies)
         graphic_vertecies_destroy(visual->vertecies);
-    visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, str);
+    visual->vertecies = graphic_vertecies_create_text(font_default, LINE_HEIGHT, str);
 }
 static void entities_init()
 {
@@ -374,7 +374,6 @@ void game_mouse_event(struct mouse_event event)
             supersmartAI_act(&game_state_mut);
 
             log_game_state(global_game_log_buff, sizeof(global_game_log_buff), game_state);
-            LOG(global_game_log_buff);
             change_debug_text(global_game_log_buff);
 
             represent_current_turn();

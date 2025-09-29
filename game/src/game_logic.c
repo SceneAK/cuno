@@ -137,6 +137,7 @@ static int play_card_effect(struct game_state *game, struct card *card, enum car
 void game_state_init(struct game_state *game, int player_len)
 {
     game->active_player_index = 0;
+    game->turn          = 0;
     game->player_len    = player_len;
     game->players       = malloc( game->player_len*sizeof(struct player) );
     game->ended         = 0;
@@ -258,13 +259,12 @@ int end_turn(struct game_state *game)
     increment = (1 + game->skip_pool) * game->turn_dir;
     game->skip_pool = 0;
 
-    game->active_player_index += increment;
-    if (game->active_player_index >= game->player_len)
-        game->active_player_index -= game->player_len;
+    game->active_player_index = (game->active_player_index + increment) % game->player_len;
     if (game->active_player_index < 0)
         game->active_player_index += game->player_len;
 
     game->acted = 0;
+    game->turn++;
     return 0;
 }
 
@@ -365,13 +365,15 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
     size_t total;
 
     total = snprintf(buffer, buffer_len, 
-        "GAME_STATE"
+        "GAME_STATE\n"
+        "========== TURN %d =========\n"
         " - ended: %i\n"
         " - acted: %i\n"
         " - turn_dir: %i\n"
         " - skip_pool: %i\n"
         " - batsu_pool: %i\n"
         " - active_player_index: %i\n",
+        game->turn,
         game->ended,
         game->acted,
         game->turn_dir,

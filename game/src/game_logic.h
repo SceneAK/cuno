@@ -35,6 +35,7 @@ struct player {
     struct card_list    hand;
 };
 struct game_state {
+    int             turn;
     char            ended;
     struct player  *players;
     int             player_len;
@@ -46,7 +47,8 @@ struct game_state {
     } acted;
 
     struct card     top_card;
-    int             turn_dir;    int             skip_pool;
+    int             turn_dir;
+    int             skip_pool;
     int             batsu_pool;
 };
 
