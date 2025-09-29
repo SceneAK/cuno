@@ -20,6 +20,7 @@ add_library(cuno SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/asset_management_andr.c
 )
+
 find_library(GLES NAMES GLESv2 REQUIRED)
 find_library(EGL NAMES EGL REQUIRED)
 add_dependencies(cuno outputdir)

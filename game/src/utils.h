@@ -2,7 +2,7 @@
 #define UTILS_H
 #include <stddef.h>
 
-struct array_list { \
+struct array_list {
     void   *elements;
     size_t  len;
     size_t  allocated_len;

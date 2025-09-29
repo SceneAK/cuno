@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "system/graphic/graphic.h"
 #include "system/logging.h"
-#include "main.h"
+#include "game.h"
 
 #include "asset_management_andr.h"
 

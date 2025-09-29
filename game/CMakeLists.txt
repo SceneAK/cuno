@@ -2,7 +2,7 @@ set(SRC_DIR "${CMAKE_SOURCE_DIR}/game/src")
 set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/game/assets")
 
 add_library(game STATIC
-    ${SRC_DIR}/main.c
+    ${SRC_DIR}/game.c
     ${SRC_DIR}/game_math.c
     ${SRC_DIR}/game_logic.c
     ${SRC_DIR}/component.c

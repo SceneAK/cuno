@@ -6,7 +6,7 @@
 #include "game_math.h"
 #include "game_logic.h"
 #include "component.h"
-#include "main.h"
+#include "game.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
 
@@ -66,7 +66,8 @@ static void set_top_card(entity_t card)
 static entity_t entity_card_create(const struct card *card)
 {
     char                   temp[8];
-    const float            TEXT_Z = 0.5f;
+    const float            TEXT_Z = 0.5f,
+                           CHAR_WIDTH = 0.2375;
     struct comp_transform *transf;
     struct comp_visual    *visual;
     entity_t               main,
@@ -95,31 +96,32 @@ static entity_t entity_card_create(const struct card *card)
     switch (card->type) { /* should cache verts */
         case NUMBER:
             snprintf(temp, 8, "[ %i ]", card->num);
-            transf->trans           = vec3_create(-0.645, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*2.5, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, temp);
             break;
         case REVERSE:
-            transf->trans           = vec3_create(-0.645, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*3.5, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ <=> ]");
             break;
         case SKIP:
-            transf->trans           = vec3_create(-0.645, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ >> ]");
             break;
         case PLUS2:
-            transf->trans           = vec3_create(-0.645, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +2 ]");
             break;
         case PICK_COLOR:
-            transf->trans           = vec3_create(-0.95, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*4, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK ]");
             break;
         case PLUS4:
-            transf->trans           = vec3_create(-0.645, 0, TEXT_Z);
+            transf->trans           = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
             visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +4 ]");
             break;
         default:
-            visual->vertecies = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ ??? ]");
+            transf->trans           = vec3_create(-CHAR_WIDTH*3.5, 0, TEXT_Z);
+            visual->vertecies       = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ ??? ]");
             break;
     }
     transf->synced = 0;
