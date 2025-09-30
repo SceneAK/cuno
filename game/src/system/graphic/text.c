@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include "external/stb_truetype.h"
 #include "system/graphic/text.h"
-#include "system/graphic/graphic.h"
+#include "system/graphic.h"
 
 static void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len)
 {

@@ -1,7 +1,7 @@
 #ifndef TEXT_H
 #define TEXT_H
 #include <stddef.h>
-#include "system/graphic/graphic.h"
+#include "system/graphic.h"
 
 struct codepoint {
     float x0, y0, x1, y1, xoff, yoff, xadv;

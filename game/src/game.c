@@ -1,11 +1,12 @@
 #include <stdio.h>
-#include "system/logging.h"
-#include "system/graphic/graphic.h"
+#include "system/log.h"
+#include "system/graphic.h"
 #include "system/graphic/text.h"
-#include "system/asset_management.h"
-#include "game_math.h"
-#include "game_logic.h"
+#include "system/asset.h"
+#include "gmath.h"
+#include "logic.h"
 #include "component.h"
+#include "entsys.h"
 #include "game.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
@@ -86,6 +87,7 @@ static entity_t entity_card_create(const struct card *card)
     visual->texture         = NULL;
     visual->color           = card_color_to_rgb(card->color);
     *card_id                = card->id;
+    entity_system.signature[main] = SIGNATURE_TRANSFORM | SIGNATURE_VISUAL_PERSP | SIGNATURE_CARD;
 
     text = entity_system_activate_new(&entity_system);
     transf = comp_transform_pool_emplace(&entity_system.transform_sys.pool, text);
@@ -128,8 +130,8 @@ static entity_t entity_card_create(const struct card *card)
     visual->texture      = font_texture;
     visual->color        = card->color == BLACK ? VEC3_ONE : VEC3_ZERO;
     visual->draw_pass    = 1;
-
     entity_system_parent(&entity_system, main, text);
+    entity_system.signature[text] = SIGNATURE_TRANSFORM | SIGNATURE_VISUAL_PERSP | SIGNATURE_PARENT;
 
     return main;
 }
@@ -138,9 +140,10 @@ static void entity_card_destroy(entity_t main)
     int i;
     entity_t text = entity_system.first_child_map[main];
     graphic_vertecies_destroy(comp_visual_pool_try_get(&entity_system.visual_sys.pool_persp, text)->vertecies);
-    entity_system_erase_via_signature(&entity_system, main, 1<<SIGN_TRANSFORM | 1<<SIGN_VISUAL_PERSP | 1<<SIGN_CARD);
-    entity_system_erase_via_signature(&entity_system, text, 1<<SIGN_TRANSFORM | 1<<SIGN_VISUAL_PERSP);
-    entity_system_unparent(&entity_system, text);
+
+    entity_system_cleanup_via_signature(&entity_system, main);
+    entity_system_cleanup_via_signature(&entity_system, text);
+
     entity_system_deactivate(&entity_system, main);
     entity_system_deactivate(&entity_system, text);
 }
@@ -162,11 +165,13 @@ static void entity_player_add_cards(entity_t player, const struct card *cards, i
 
     for (i = 0; i < amount; i++) {
         entity_card     = entity_card_create(cards + i);
+        entity_system_parent(&entity_system, player, entity_card);
+        entity_system.signature[entity_card] |= SIGNATURE_PARENT;
+
         transf          = comp_transform_pool_try_get(&entity_system.transform_sys.pool, entity_card);
         transf->trans   = vec3_create(transf_last.trans.x + DIST, 0, 0);
         transf->rot     = vec3_create(0, -PI/12, 0);
         comp_transform_system_mark_family_desync(&entity_system.transform_sys, entity_card);
-        entity_system_parent(&entity_system, player, entity_card);
 
         transf_last = *transf;
     }
@@ -242,11 +247,12 @@ static int resources_init(struct graphic_session *created_session)
     ortho_height = session_info.height;
 
     handle = asset_open(ASSET_PATH_FONT);
-    if (asset_read(buffer, 1<<19, handle))
+    if (asset_read(buffer, 1<<19, handle)) {
         font_default = create_ascii_baked_font(buffer);
+        font_texture = graphic_texture_create(font_default.width, font_default.height, font_default.bitmap, 1);
+    }
     asset_close(handle);
 
-    font_texture    = graphic_texture_create(font_default.width, font_default.height, font_default.bitmap, 1);
     card_vertecies  = graphic_vertecies_create(CARD_VERTS_RAW, 6);
 
     perspective  = mat4_perspective(DEG_TO_RAD(FOV_DEG), aspect_ratio, NEAR);
@@ -287,6 +293,7 @@ static void entities_init()
     transf->rot         = vec3_create(-PI/8, 0, 0);
     transf->scale       = vec3_create(0.4, 0.4, 0.4); 
     transf->synced      = 0;
+    entity_system.signature[entity_players[0]] = SIGNATURE_TRANSFORM;
 
     entity_players[1] = entity_player_create(game_state->players + 1);
     transf              = comp_transform_pool_try_get(&entity_system.transform_sys.pool, entity_players[1]);
@@ -294,6 +301,7 @@ static void entities_init()
     transf->rot         = vec3_create(PI/8, 0, 0); 
     transf->scale       = vec3_create(0.3, 0.3, 0.3);
     transf->synced      = 0;
+    entity_system.signature[entity_players[1]] = SIGNATURE_TRANSFORM;
 
     entity_top_card = entity_card_create(&game_state->top_card);
     set_top_card(entity_top_card);
@@ -314,6 +322,7 @@ static void entities_init()
     hitrect->rect       = CARD_BOUNDS;
     hitrect->rect_type  = RECT_ORTHOSPACE;
     hitrect->hitmask    = HITMASK_MOUSE_DOWN | HITMASK_MOUSE_UP;
+    entity_system.signature[entity_act_button] = SIGNATURE_TRANSFORM | SIGNATURE_VISUAL_ORTHO | SIGNATURE_HITRECT;
 
     entity_debug_text   = entity_system_activate_new(&entity_system);
     transf  = comp_transform_pool_emplace(&entity_system.transform_sys.pool, entity_debug_text);
@@ -325,6 +334,8 @@ static void entities_init()
     transf->synced      = 0;
     visual->texture     = font_texture;
     visual->color       = VEC3_ZERO;
+    visual->draw_pass   = 1;
+    entity_system.signature[entity_act_button] = SIGNATURE_TRANSFORM | SIGNATURE_VISUAL_ORTHO;
 }
 
 static void render()

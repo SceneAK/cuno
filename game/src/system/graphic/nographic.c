@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "system/graphic/graphic.h"
+#include "system/graphic.h"
 
 struct graphic_session {
     int none;

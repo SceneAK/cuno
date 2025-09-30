@@ -1,7 +1,7 @@
 #ifndef GRAPHIC_H
 #define GRAPHIC_H
 #include <stddef.h>
-#include "game_math.h"
+#include "gmath.h"
 
 #define VERT_NUM_OF_ELEMENTS 5
 #define VERT_SIZE (VERT_NUM_OF_ELEMENTS*sizeof(float))

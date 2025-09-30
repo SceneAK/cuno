@@ -18,7 +18,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_APP_DIR}/lib/${ANDROID_ABI})
 add_library(cuno SHARED
     ${CMAKE_SOURCE_DIR}/game/src/system/graphic/egl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cunoandr.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset_management_andr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/assetandr.c
 )
 
 find_library(GLES NAMES GLESv2 REQUIRED)

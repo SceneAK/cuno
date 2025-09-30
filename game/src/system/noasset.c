@@ -1,4 +1,4 @@
-#include "system/asset_management.h"
+#include "system/asset.h"
 
 asset_handle asset_open(const char *asset_path) 
 {

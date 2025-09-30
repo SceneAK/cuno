@@ -1,10 +1,10 @@
 #include <android_native_app_glue.h>
 #include <stdlib.h>
-#include "system/graphic/graphic.h"
-#include "system/logging.h"
+#include "system/graphic.h"
+#include "system/log.h"
 #include "game.h"
 
-#include "asset_management_andr.h"
+#include "assetandr.h"
 
 static struct graphic_session *session = NULL;
 
@@ -16,7 +16,7 @@ int on_init_window(struct android_app *app)
         session = graphic_session_create();
 
     if (graphic_session_reset_window(session, app->window) != 0) {
-        LOG("ERR: Switch window failed");
+        LOG("ANDR: (err) Switch window failed");
         return -1;
     }
     return 0;

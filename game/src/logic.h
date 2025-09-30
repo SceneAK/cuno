@@ -1,7 +1,7 @@
 #ifndef GAME_LOGIC_H
 #define GAME_LOGIC_H
 #include <stdlib.h>
-#include "game_math.h"
+#include "gmath.h"
 #include "utils.h"
 
 #define IS_PICKABLE_COLOR(color) ( 0 <= (color) && (color) <= 3 )

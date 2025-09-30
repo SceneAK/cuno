@@ -1,6 +1,6 @@
 #ifndef MAIN_H
 #define MAIN_H
-#include "system/graphic/graphic.h"
+#include "system/graphic.h"
 
 struct mouse_event {
     enum {

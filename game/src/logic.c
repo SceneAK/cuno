@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include "system/logging.h"
-#include "game_logic.h"
-#include "game_math.h"
+#include "system/log.h"
+#include "logic.h"
+#include "gmath.h"
 
 #define DIV_255(val) val/255.0f
 

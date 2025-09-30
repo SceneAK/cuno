@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
-#include "system/graphic/graphic.h"
-#include "system/logging.h"
-#include "game_math.h"
+#include "system/graphic.h"
+#include "system/log.h"
+#include "gmath.h"
 #include "component.h"
 
 /* SPARSE SET */
@@ -163,7 +163,6 @@ static void comp_visual_transform_pool_draw(struct comp_visual_pool *pool, struc
                          visual->texture, 
                          mat4_mult(*projection, transf ? transf->matrix : MAT4_IDENTITY),
                          visual->color);
-
         }
     }
 }

@@ -2,11 +2,11 @@
 #include <EGL/egl.h>
 #include <stdlib.h>
 #include <string.h>
-#include "system/graphic/graphic.h"
+#include "system/graphic.h"
 #include "system/graphic/glutil.h"
 #include "system/graphic/glres.h"
-#include "system/logging.h"
-#include "game_math.h"
+#include "system/log.h"
+#include "gmath.h"
 
 struct graphic_session {
     EGLDisplay  display;

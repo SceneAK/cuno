@@ -1,6 +1,6 @@
 #include <math.h>
-#include "system/logging.h"
-#include "game_math.h"
+#include "system/log.h"
+#include "gmath.h"
 
 /* VECTORS */
 vec2 vec2_create(float x, float y)
