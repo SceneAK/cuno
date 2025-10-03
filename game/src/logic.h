@@ -4,7 +4,7 @@
 #include "gmath.h"
 #include "utils.h"
 
-#define IS_PICKABLE_COLOR(color) ( 0 <= (color) && (color) <= 3 )
+#define is_pickable_color(color) ( 0 <= (color) && (color) <= 3 )
 
 typedef unsigned short card_id_t;
 struct card {

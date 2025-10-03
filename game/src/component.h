@@ -1,84 +1,70 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
+#include <string.h>
+#include "system/log.h"
 #include "system/graphic.h"
-#include "logic.h"
 
-typedef unsigned short entity_t;
 #define ENTITY_MAX          8192
 #define ENTITY_INVALID      ENTITY_MAX
-#define COMP_INDEX_INVALID  (unsigned short)(-1)
 
-static int entity_is_invalid(entity_t entity) 
+#define entity_is_invalid(entity) (entity == ENTITY_INVALID || entity > ENTITY_MAX)
+
+#define entity_record_init(entrec_ptr) memset(entrec_ptr, 0, sizeof(struct entity_record))
+#define entity_record_flag_component(entrec_ptr, entity, flag) (entrec_ptr)->component_flags[entity] |= flag
+#define entity_record_unflag_component(entrec, entity, flag) (entrec)->component_flags[entity] &= ~(flag)
+
+typedef unsigned short entity_t;
+typedef unsigned int component_flag_t;
+
+struct entity_record {
+    char                active[ENTITY_MAX];
+    component_flag_t    component_flags[ENTITY_MAX];
+};
+
+static entity_t entity_record_activate(struct entity_record *entrec)
 {
-    return entity == ENTITY_INVALID || entity > ENTITY_MAX;
+    int i;
+    for (i = 0; i < ENTITY_MAX; i++)
+        if (!entrec->active[i]) {
+            entrec->active[i] = 1;
+            return i;
+        }
+    LOG("ENTREC: (warn) recorded entity hit ENTITY_MAX");
+    return ENTITY_INVALID;
+}
+static int entity_record_deactivate(struct entity_record *entrec, entity_t entity)
+{
+    if (entrec->component_flags[entity]) {
+        LOGF("ENTREC: (warn) entity %d can't deactivate due to its non-zero signature (%d)", entity, entrec->component_flags[entity]);
+        return -1;
+    }
+    return entrec->active[entity] = 0;
 }
 
 
-struct component_pool {
-    unsigned short  sparse[ENTITY_MAX];
-    entity_t        dense[ENTITY_MAX];
-    size_t          len,
-                    allocated_len;
-    void           *data;
+
+#define HITMASK_MOUSE_DOWN  1<<0
+#define HITMASK_MOUSE_UP    1<<1
+#define HITMASK_MOUSE_HOVER 1<<2
+#define HITMASK_MOUSE_HOLD  1<<3
+
+struct comp_system {
+    struct entity_record   *entity_record;
+    component_flag_t        component_flag;
 };
-int component_pool_init(struct component_pool *pool, size_t initial_alloc_len, size_t elem_size);
-void component_pool_deinit(struct component_pool *pool);
-void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_t elem_size);
-int component_pool_erase(struct component_pool *pool, entity_t entity, size_t elem_size);
-
-#define DEFINE_COMPONENT_POOL_STRUCT(type, name) \
-    struct name { \
-        unsigned short  sparse[ENTITY_MAX]; \
-        entity_t        dense[ENTITY_MAX]; \
-        size_t          len, \
-                        allocated_len; \
-        type           *data; \
-    };
-#define DEFINE_COMPONENT_POOL_INIT(type, name) \
-    int name##_init(struct name *pool, size_t initial_alloc_len) \
-    { \
-        return component_pool_init((struct component_pool *)pool, initial_alloc_len, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_DEINIT(type, name) \
-    void name##_deinit(struct name *pool) \
-    { \
-        component_pool_deinit((struct component_pool *)pool); \
-    }
-#define DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
-    type *name##_emplace(struct name *pool, entity_t entity) \
-    { \
-        return (type *)component_pool_emplace((struct component_pool *)pool, entity, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_ERASE(type, name) \
-    int name##_erase(struct name *pool, entity_t entity) \
-    { \
-        return component_pool_erase((struct component_pool *)pool, entity, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_TRY_GET(type, name) \
-    type *name##_try_get(struct name *pool, entity_t entity) \
-    { \
-        if (entity == ENTITY_INVALID || pool->sparse[entity] == COMP_INDEX_INVALID) \
-            return NULL; \
-        return pool->data + pool->sparse[entity];  \
-    }
-#define DEFINE_COMPONENT_POOL(static_inline, type, name) \
-    DEFINE_COMPONENT_POOL_STRUCT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_INIT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_DEINIT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_ERASE(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_TRY_GET(type, name)
-
-struct comp_transform_props {
-    vec3                    trans, rot, scale;
+struct comp_system_family_view {
+    const entity_t   *parent_map;
+    const entity_t   *first_child_map;
+    const entity_t   *sibling_map;
 };
 struct comp_transform {
-    vec3                    trans, rot, scale;
-    char                    synced;
+    vec3                        trans, rot, scale;
+    char                        synced;
 
-    unsigned short          matrix_version;
-    mat4                    matrix;
+    unsigned short              matrix_version;
+    mat4                        matrix;
 };
+enum projection_type { PROJ_ORTHO, PROJ_PERSP };
 struct comp_visual {
     struct graphic_vertecies   *vertecies;
     struct graphic_texture     *texture;
@@ -86,55 +72,50 @@ struct comp_visual {
     short                       draw_pass;
 };
 struct comp_hitrect {
-    mat4                    cached_matrix_inv;
-    unsigned short          cached_version;
+    mat4                        cached_matrix_inv;
+    unsigned short              cached_version;
 
     enum {
         RECT_CAMSPACE, 
         RECT_ORTHOSPACE
-    }                       rect_type;
-    rect2D                  rect;
-    unsigned char           hitstate,
-                            hitmask;
+    }                           type;
+    rect2D                      rect;
+    unsigned char               hitstate;
+    unsigned char               hitmask;
 };
+struct comp_system_family;
+struct comp_system_transform;
+struct comp_system_visual;
+struct comp_system_hitrect;
 
+struct comp_system_family *comp_system_family_create(struct comp_system base);
+void comp_system_family_adopt(struct comp_system_family *sys, entity_t parent, entity_t entity);
+int comp_system_family_disown(struct comp_system_family *sys, entity_t entity);
+size_t comp_system_family_count_children(struct comp_system_family *sys, entity_t entity);
+entity_t comp_system_family_find_previous_sibling(struct comp_system_family *sys, entity_t entity);
+entity_t comp_system_family_find_last_child(struct comp_system_family *sys, entity_t parent);
+struct comp_system_family_view comp_system_family_view(struct comp_system_family *sys);
 
 void comp_transform_set_default(struct comp_transform *transf);
-DEFINE_COMPONENT_POOL(static, struct comp_transform, comp_transform_pool)
-struct comp_transform_system {
-    struct comp_transform_pool pool;
-    entity_t                   *parent_map;
-    entity_t                   *first_child_map;
-    entity_t                   *sibling_map;
-};
-void comp_transform_system_init(struct comp_transform_system *system, entity_t *parent_map, entity_t *first_child_map, entity_t *sibling_map, size_t initial_alloc_len);
-void comp_transform_system_mark_family_desync(struct comp_transform_system *system, entity_t entity);
-void comp_transform_system_sync_matrices(struct comp_transform_system *system);
-
+struct comp_system_transform *comp_system_transform_create(struct comp_system base, struct comp_system_family *sys_fam);
+struct comp_transform *comp_system_transform_emplace(struct comp_system_transform *sys, entity_t entity);
+void comp_system_transform_erase(struct comp_system_transform *sys, entity_t entity);
+struct comp_transform *comp_system_transform_get(struct comp_system_transform *sys, entity_t entity);
+void comp_system_transform_mark_family_desync(struct comp_system_transform *sys, entity_t family_parent);
+void comp_system_transform_sync_matrices(struct comp_system_transform *sys);
 
 void comp_visual_set_default(struct comp_visual *visual);
-DEFINE_COMPONENT_POOL(static, struct comp_visual, comp_visual_pool)
-struct comp_visual_system {
-    struct comp_visual_pool     pool_ortho;
-    struct comp_visual_pool     pool_persp;
-    struct comp_transform_pool *transf_pool;
-};
-void comp_visual_system_draw(struct comp_visual_system *vis_sys, const mat4 *persp, const mat4 *ortho);
+struct comp_system_visual *comp_system_visual_create(struct comp_system base, struct comp_system_transform *sys_transf);
+struct comp_visual *comp_system_visual_emplace(struct comp_system_visual *sys, entity_t entity, enum projection_type proj);
+void comp_system_visual_erase(struct comp_system_visual *sys, entity_t entity);
+struct comp_visual *comp_system_visual_get(struct comp_system_visual *sys, entity_t entity);
+void comp_system_visual_draw(struct comp_system_visual *sys, const mat4 *persp, const mat4 *ortho);
 
-
-#define HITMASK_MOUSE_DOWN  0b0001
-#define HITMASK_MOUSE_UP    0b0010
-#define HITMASK_MOUSE_HOVER 0b0100
-#define HITMASK_MOUSE_HOLD  0b1000
 void comp_hitrect_set_default(struct comp_hitrect *hitrect);
-DEFINE_COMPONENT_POOL(static, struct comp_hitrect, comp_hitrect_pool)
-struct comp_hitrect_system {
-    struct comp_hitrect_pool    pool;
-    struct comp_transform_pool *transf_pool;
-};
-void comp_hitrect_system_update_hitstate(struct comp_hitrect_system *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
-
-
-DEFINE_COMPONENT_POOL(static, card_id_t, card_id_pool);
+struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, struct comp_system_transform *sys_transf);
+struct comp_hitrect *comp_system_hitrect_emplace(struct comp_system_hitrect *sys, entity_t entity);
+void comp_system_hitrect_erase(struct comp_system_hitrect *sys, entity_t entity);
+struct comp_hitrect *comp_system_hitrect_get(struct comp_system_hitrect *sys, entity_t entity);
+void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
 
 #endif

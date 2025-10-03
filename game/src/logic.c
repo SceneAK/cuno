@@ -101,8 +101,8 @@ static void remove_cards(struct player *player, const size_t *indices, size_t le
     card_list_remove_swp(&player->hand, indices, len);
 }
 
-#define IS_SAME_COLOR(a, b) ((a).color == (b).color)
-#define IS_SAME_TYPE(a, b) ((a).type == (b).type) \
+#define card_same_color(a, b) ((a).color == (b).color)
+#define card_same_type(a, b) ((a).type == (b).type) \
                         && ((a).type != NUMBER || (a).num == (b).num)
 
 static int play_card_effect(struct game_state *game, struct card *card, enum card_color arg_color)
@@ -123,7 +123,7 @@ static int play_card_effect(struct game_state *game, struct card *card, enum car
         case PLUS4:
             game->batsu_pool += 4;
         case PICK_COLOR:
-            if (!IS_PICKABLE_COLOR(arg_color))
+            if (!is_pickable_color(arg_color))
                 return -1;
             card->color = arg_color;
             break;
@@ -201,8 +201,8 @@ int is_legal_play(const struct game_state *game, const size_t *indices, int len)
 
     for (i = 0; i < len; i++) {
         card = active_hand + indices[i];
-        same_type = IS_SAME_TYPE(*previous_card, *card);
-        same_color = IS_SAME_COLOR(*previous_card, *card);
+        same_type = card_same_type(*previous_card, *card);
+        same_color = card_same_color(*previous_card, *card);
 
         if (i == 0) {
             if (game->batsu_pool && !same_type && card->type != PLUS4)

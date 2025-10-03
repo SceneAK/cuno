@@ -12,7 +12,7 @@ struct mouse_event {
     float mouse_x, mouse_y;
 };
 int game_init(struct graphic_session *graphic);
-void game_update();
+void game_update(void);
 void game_mouse_event(struct mouse_event mevent);
 
 #endif

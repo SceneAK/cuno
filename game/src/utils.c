@@ -1,7 +1,7 @@
-#include "system/log.h"
 #include <stdlib.h>
 #include <string.h>
 #include "utils.h"
+
 
 /* ARRAY LIST */
 void array_list_init(struct array_list *list, size_t initial_alloc_len, size_t elem_size)
