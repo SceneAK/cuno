@@ -2,57 +2,16 @@
 #include "system/log.h"
 #include "gmath.h"
 
-/* VECTORS */
-vec2 vec2_create(float x, float y)
-{ 
-    vec2 val = {x, y};
-    return val;
-}
-
-vec3 vec3_create(float x, float y, float z)
-{ 
-    vec3 val = {x, y, z};
-    return val;
-}
-
-int vec3_equal(vec3 a, vec3 b)
+vec3 mat3_to_euler(mat4 mat3)
 {
-    return a.x == b.x && a.y == b.y && a.z == b.z;
-}
-
-vec3 vec3_add(vec3 a, vec3 b)
-{
-    vec3 sum = {
-        a.x + b.x,
-        a.y + b.y,
-        a.z + b.z
-    };
-    return sum;
-}
-
-vec3 vec3_mult(vec3 a, vec3 b)
-{
-    vec3 product = {
-        a.x * b.x,
-        a.y * b.y,
-        a.z * b.z
-    };
-    return product;
-}
-
-
-vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
-{
-    vec3 result;
-    int col;
-
-    col = 0;
-    result.x = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
-    col = 1;
-    result.y = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
-    col = 2;
-    result.z = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
-
+    vec3 result = {0, asin(-mat3.m[2][0]), 0};
+    if (fabs(mat3.m[2][0]) != 1) {
+        result.x = atan2(mat3.m[2][1], mat3.m[2][2]);
+        result.z = atan2(mat3.m[1][0], mat3.m[0][0]);
+    } else {
+        result.x = 0;
+        result.z = atan2(-mat3.m[0][1], mat3.m[1][1]);
+    }
     return result;
 }
 
@@ -196,19 +155,19 @@ mat4 mat4_invert(mat4 mat)
 }
 
 /* MATRIX UTILS */
-mat4 mat4_trs(vec3 trans, vec3 rot, vec3 scale)
+mat4 mat4_trs(struct transform transf)
 {
-    mat4 trs = mat4_scale(scale);
+    mat4 trs = mat4_scale(transf.scale);
 
-    if (rot.x)
-        trs = mat4_mult(mat4_rotx(rot.x), trs);
-    if (rot.y)
-        trs = mat4_mult(mat4_roty(rot.y), trs);
-    if (rot.z)
-        trs = mat4_mult(mat4_rotz(rot.z), trs);
+    if (transf.rot.x)
+        trs = mat4_mult(mat4_rotx(transf.rot.x), trs);
+    if (transf.rot.y)
+        trs = mat4_mult(mat4_roty(transf.rot.y), trs);
+    if (transf.rot.z)
+        trs = mat4_mult(mat4_rotz(transf.rot.z), trs);
 
-    if (trans.x || trans.y || trans.z)
-        trs = mat4_mult(mat4_trans(trans), trs);
+    if (transf.trans.x || transf.trans.y || transf.trans.z)
+        trs = mat4_mult(mat4_trans(transf.trans), trs);
 
     return trs;
 }
@@ -265,6 +224,34 @@ vec2 ndc_to_orthospace(float ortho_width, float ortho_height, vec2 ndc)
         ndc.y * ortho_height/2
     };
     return ortho;
+}
+
+/* TRANSFORM */
+struct transform transform_delta(struct transform transform, struct transform target)
+{
+    struct transform result = {
+        vec3_sum(target.trans, vec3_mult(transform.trans, VEC3_ONE_NEG)),
+        vec3_sum(target.rot, vec3_mult(transform.rot, VEC3_ONE_NEG)),
+        vec3_sum(target.scale, vec3_mult(transform.scale, VEC3_ONE_NEG)),
+    };
+    return result;
+}
+struct transform transform_from_mat4(mat4 mat)
+{
+    struct transform result = {
+        { mat.m[0][3], mat.m[1][3], mat.m[2][3] }
+    };
+    result.scale.x = sqrt(mat.m[0][0]*mat.m[0][0] + mat.m[1][0]*mat.m[1][0] + mat.m[2][0]*mat.m[2][0]);
+    result.scale.y = sqrt(mat.m[0][1]*mat.m[0][1] + mat.m[1][1]*mat.m[1][1] + mat.m[2][1]*mat.m[2][1]);
+    result.scale.z = sqrt(mat.m[0][2]*mat.m[0][2] + mat.m[1][2]*mat.m[1][2] + mat.m[2][2]*mat.m[2][2]);
+
+    mat.m[0][0] /= result.scale.x; mat.m[1][0] /= result.scale.x; mat.m[2][0] /= result.scale.x;
+    mat.m[0][1] /= result.scale.y; mat.m[1][1] /= result.scale.y; mat.m[2][1] /= result.scale.y;
+    mat.m[0][2] /= result.scale.z; mat.m[1][2] /= result.scale.z; mat.m[2][2] /= result.scale.z;
+
+    result.rot = mat3_to_euler(mat);
+
+    return result;
 }
 
 /* UTILS - RECT BOUNDS */

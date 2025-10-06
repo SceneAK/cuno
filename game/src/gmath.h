@@ -9,14 +9,76 @@ typedef struct { float x, y; } vec2;
 typedef struct { float x, y, z; } vec3;
 
 static const vec3 VEC3_ONE = { 1, 1, 1 };
+static const vec3 VEC3_ONE_NEG = { -1, -1, -1 };
 static const vec3 VEC3_ZERO  = { 0, 0, 0 };
 
+struct transform {
+    vec3    trans, rot, scale;
+};
+static const struct transform TRANSFORM_ZERO = {0};
+
 /* VECTORS */
-vec2 vec2_create(float x, float y);
-vec3 vec3_create(float x, float y, float z);
-vec3 vec3_sum(vec3 a, vec3 b);
-vec3 vec3_mult(vec3 a, vec3 b);
-vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w);
+static vec2 vec2_create(float x, float y)
+{ 
+    vec2 val = {x, y};
+    return val;
+}
+static vec3 vec3_create(float x, float y, float z)
+{ 
+    vec3 val = {x, y, z};
+    return val;
+}
+static vec3 vec3_all(float f)
+{ 
+    vec3 val = {f, f, f};
+    return val;
+}
+static int vec3_equal(vec3 a, vec3 b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+static vec3 vec3_sum(vec3 a, vec3 b)
+{
+    vec3 sum = {
+        a.x + b.x,
+        a.y + b.y,
+        a.z + b.z
+    };
+    return sum;
+}
+static vec3 vec3_mult(vec3 a, vec3 b)
+{
+    vec3 product = {
+        a.x * b.x,
+        a.y * b.y,
+        a.z * b.z
+    };
+    return product;
+}
+static void vec3_mult_ptr(vec3 *a, vec3 b)
+{
+    a->x *= b.x;
+    a->y *= b.y;
+    a->z *= b.z;
+}
+static vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
+{
+    vec3 result;
+    int col;
+
+    col = 0;
+    result.x = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
+    col = 1;
+    result.y = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
+    col = 2;
+    result.z = (mat.m[col][0] * vec.x) + (mat.m[col][1] * vec.y) + (mat.m[col][2] * vec.z) + (mat.m[col][3] * w);
+
+    return result;
+}
+
+/* TRANSFORM */
+struct transform transform_delta(struct transform transform, struct transform target);
+struct transform transform_from_mat4(mat4 mat);
 
 /* MATRIX - Expected Row-Major */
 static const mat4 MAT4_IDENTITY  =  { {
@@ -32,7 +94,7 @@ mat4 mat4_roty(float rad);
 mat4 mat4_rotz(float rad);
 mat4 mat4_mult(mat4 a, mat4 b); /* Chains nicely at the cost of copying mat4s */
 mat4 mat4_invert(mat4 mat);
-mat4 mat4_trs(vec3 trans, vec3 rot, vec3 scale);
+mat4 mat4_trs(struct transform transf);
 mat4 mat4_perspective(float fov_y, float aspect, float near);
 mat4 mat4_orthographic(float width, float height, float far);
 

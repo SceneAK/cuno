@@ -16,7 +16,7 @@ int on_init_window(struct android_app *app)
         session = graphic_session_create();
 
     if (graphic_session_reset_window(session, app->window) != 0) {
-        LOG("ANDR: (err) Switch window failed");
+        LOG("ANDR: (err) reset window failed");
         return -1;
     }
     return 0;

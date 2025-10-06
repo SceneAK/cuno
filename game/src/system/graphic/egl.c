@@ -65,7 +65,7 @@ struct graphic_session *graphic_session_create()
     return session;
 
 err:
-    LOG(egl_err_to_str(eglGetError()));
+    LOGF("GRAPHIC: (err) From egl: %s", egl_err_to_str(eglGetError()));
     free(session);
     return NULL;
 }
@@ -93,7 +93,7 @@ int graphic_session_reset_window(struct graphic_session *session, void *native_w
         session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
 
     if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE)  {
-        LOG("ERR: Failed to make context current");
+        LOG("GRAPHIC: (err) Failed to make context current");
         return -1;
     }
 
@@ -146,7 +146,7 @@ static void create_program()
     if (!linked) {
         char log[512];
         glGetProgramInfoLog(default_program, sizeof(log), NULL, log);
-        LOGF("Shader compile error: %s\n", log);
+        LOGF("GRAPHIC: (err) Shader compile error: %s", log);
     }
 
     glDeleteShader(vertex_shader);

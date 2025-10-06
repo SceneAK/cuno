@@ -3,6 +3,8 @@
 #include <string.h>
 #include "system/log.h"
 #include "system/graphic.h"
+#include "gmath.h"
+#include "utils.h"
 
 #define ENTITY_MAX          8192
 #define ENTITY_INVALID      ENTITY_MAX
@@ -40,6 +42,7 @@ static int entity_record_deactivate(struct entity_record *entrec, entity_t entit
     }
     return entrec->active[entity] = 0;
 }
+DEFINE_ARRAY_LIST_WRAPPER(static, entity_t, entity_list)
 
 
 
@@ -58,7 +61,7 @@ struct comp_system_family_view {
     const entity_t   *sibling_map;
 };
 struct comp_transform {
-    vec3                        trans, rot, scale;
+    struct transform            data;
     char                        synced;
 
     unsigned short              matrix_version;
@@ -83,10 +86,19 @@ struct comp_hitrect {
     unsigned char               hitstate;
     unsigned char               hitmask;
 };
+struct comp_interpolator {
+    struct transform            target_delta;
+    struct transform            start_transform;
+    double                      start_time;
+    float                       ease_in,
+                                linear2,
+                                ease_out;
+};
 struct comp_system_family;
 struct comp_system_transform;
 struct comp_system_visual;
 struct comp_system_hitrect;
+struct comp_system_interpolator;
 
 struct comp_system_family *comp_system_family_create(struct comp_system base);
 void comp_system_family_adopt(struct comp_system_family *sys, entity_t parent, entity_t entity);
@@ -101,8 +113,9 @@ struct comp_system_transform *comp_system_transform_create(struct comp_system ba
 struct comp_transform *comp_system_transform_emplace(struct comp_system_transform *sys, entity_t entity);
 void comp_system_transform_erase(struct comp_system_transform *sys, entity_t entity);
 struct comp_transform *comp_system_transform_get(struct comp_system_transform *sys, entity_t entity);
-void comp_system_transform_mark_family_desync(struct comp_system_transform *sys, entity_t family_parent);
+void comp_system_transform_desync(struct comp_system_transform *system, entity_t entity);
 void comp_system_transform_sync_matrices(struct comp_system_transform *sys);
+struct transform comp_system_transform_get_world(struct comp_system_transform *sys, entity_t entity);
 
 void comp_visual_set_default(struct comp_visual *visual);
 struct comp_system_visual *comp_system_visual_create(struct comp_system base, struct comp_system_transform *sys_transf);
@@ -118,4 +131,11 @@ void comp_system_hitrect_erase(struct comp_system_hitrect *sys, entity_t entity)
 struct comp_hitrect *comp_system_hitrect_get(struct comp_system_hitrect *sys, entity_t entity);
 void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
 
+void comp_interpolator_set_default(struct comp_interpolator *interpolator);
+void comp_system_interpolator_to_target(struct comp_system_interpolator *sys, entity_t entity, struct transform target);
+struct comp_system_interpolator *comp_system_interpolator_create(struct comp_system base, struct comp_system_transform *sys_transf);
+struct comp_interpolator *comp_system_interpolator_emplace(struct comp_system_interpolator *sys, entity_t entity);
+void comp_system_interpolator_erase(struct comp_system_interpolator *sys, entity_t entity);
+struct comp_interpolator *comp_system_interpolator_get(struct comp_system_interpolator *sys, entity_t entity);
+void comp_system_interpolator_update(struct comp_system_interpolator *sys);
 #endif
