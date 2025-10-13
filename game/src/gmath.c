@@ -230,9 +230,9 @@ vec2 ndc_to_orthospace(float ortho_width, float ortho_height, vec2 ndc)
 struct transform transform_delta(struct transform transform, struct transform target)
 {
     struct transform result = {
-        vec3_sum(target.trans, vec3_mult(transform.trans, VEC3_ONE_NEG)),
-        vec3_sum(target.rot, vec3_mult(transform.rot, VEC3_ONE_NEG)),
-        vec3_sum(target.scale, vec3_mult(transform.scale, VEC3_ONE_NEG)),
+        vec3_sum(target.trans, vec3_mult_f(transform.trans, -1)),
+        vec3_sum(target.rot, vec3_mult_f(transform.rot, -1)),
+        vec3_sum(target.scale, vec3_mult_f(transform.scale, -1)),
     };
     return result;
 }
@@ -253,6 +253,11 @@ struct transform transform_from_mat4(mat4 mat)
 
     return result;
 }
+struct transform transform_relative(const struct transform *parent, const struct transform *subject)
+{
+    return transform_from_mat4( mat4_mult(mat4_invert(mat4_trs(*parent)), mat4_trs(*subject)) );
+}
+
 
 /* UTILS - RECT BOUNDS */
 static int on_rect(const rect2D *rect, float local_x, float local_y)

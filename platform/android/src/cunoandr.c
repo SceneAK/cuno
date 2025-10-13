@@ -1,4 +1,5 @@
 #include <android_native_app_glue.h>
+#include <android/native_window.h>
 #include <stdlib.h>
 #include "system/graphic.h"
 #include "system/log.h"
@@ -33,11 +34,15 @@ void on_app_cmd(struct android_app *app, int32_t cmd)
 {
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
+            ANativeWindow_acquire(app->window);
             if (on_init_window(app) != 0)
                 exit(EXIT_FAILURE);
             if (!game_init_finished && game_init(session) != 0)
                 exit(EXIT_FAILURE);
             game_init_finished = 1;
+            break;
+        case APP_CMD_TERM_WINDOW:
+            ANativeWindow_release(app->window);
             break;
         case APP_CMD_WINDOW_RESIZED:
             on_window_resized(app);

@@ -1,17 +1,13 @@
 # Copy app to build directory
 set(OUTPUT_APP_DIR "${CMAKE_BINARY_DIR}/app")
-set(COPY_STAMP "${OUTPUT_APP_DIR}/.cp-stmp")
-add_custom_command(
-    OUTPUT  ${COPY_STAMP}
+add_custom_target(APP_TEMPLATE_COPY
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OUTPUT_APP_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/app
             ${OUTPUT_APP_DIR}
-
-	COMMAND ${CMAKE_COMMAND} -E touch ${COPY_STAMP}
     COMMENT "Copying app to build directory"
 )
-add_custom_target(outputdir DEPENDS ${COPY_STAMP})
+add_custom_target(outputdir DEPENDS APP_TEMPLATE_COPY)
 
 # Cuno Shared Library
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_APP_DIR}/lib/${ANDROID_ABI})
@@ -39,5 +35,5 @@ target_link_libraries(cuno
     ${EGL}
 )
 
-# call to aapt2, apksign, zipalign
+# copy asan, call to aapt2, apksign, zipalign
 include(apk.cmake)

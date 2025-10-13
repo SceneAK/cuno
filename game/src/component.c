@@ -78,7 +78,7 @@ void component_pool_deinit(struct component_pool *pool)
 void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_t elem_size)
 {
     if (entity_is_invalid(entity)) {
-        LOGF("COMP: (warn) Entity %d is invalid. Cannot emplace.", entity);
+        LOG("COMP: (warn) Entity is invalid. Cannot emplace.");
         return NULL;
     }
     if (pool->sparse[entity] != -1) {
@@ -208,7 +208,7 @@ size_t comp_system_family_count_children(struct comp_system_family *sys, entity_
     entity_t    current;
 
     if (entity_is_invalid(entity)) {
-        LOGF("COMPSYS_FAM: (warn) Entity %d is invalid. Cannot count children.", entity);
+        LOG("COMPSYS_FAM: (warn) Entity is invalid. Cannot count children.");
         return SIZE_MAX;
     }
 
@@ -326,6 +326,8 @@ void comp_system_transform_desync(struct comp_system_transform *sys, entity_t en
         return;
     }
 
+    if (!transf->synced)
+        return;
     transf->synced = 0;
 
     child = sys->sys_family->first_child_map[entity];
@@ -371,12 +373,18 @@ void comp_system_transform_sync_matrices(struct comp_system_transform *sys)
 struct transform comp_system_transform_get_world(struct comp_system_transform *sys, entity_t entity)
 {
     struct comp_transform  *transf = comp_system_transform_get(sys, entity);
-    if (!transf) {
-        LOG("COMP_TRANSF: (warn) Entity does not have transform. Cannot get world transform.");
-        return TRANSFORM_ZERO;
-    }
+
     comp_system_transform_sync_matrix(sys, sys->pool.sparse[entity]);
     return transform_from_mat4(transf->matrix);
+}
+struct transform comp_system_transform_get_relative(struct comp_system_transform *sys, entity_t parent, entity_t subject)
+{
+    struct comp_transform *transf_parent = comp_system_transform_get(sys, parent),
+                          *transf_subject = comp_system_transform_get(sys, subject);
+
+    comp_system_transform_sync_matrix(sys, sys->pool.sparse[parent]);
+    comp_system_transform_sync_matrix(sys, sys->pool.sparse[subject]);
+    return transform_from_mat4( mat4_mult(mat4_invert(transf_parent->matrix), transf_subject->matrix) );
 }
 
 
@@ -502,6 +510,14 @@ void comp_interpolator_set_default(struct comp_interpolator *interpolator)
 {
     memset(interpolator, 0, sizeof(struct comp_interpolator));
 }
+static void transform_interpolate(struct transform *transf, struct transform *start, struct transform *delta, float factor)
+{
+    vec3 factor_vec;
+    factor_vec = vec3_all(factor);
+    transf->trans  = vec3_sum(start->trans, vec3_mult(delta->trans, factor_vec));
+    transf->rot    = vec3_sum(start->rot, vec3_mult(delta->rot, factor_vec));
+    transf->scale  = vec3_sum(start->scale, vec3_mult(delta->scale, factor_vec));
+}
 struct comp_system_interpolator *comp_system_interpolator_create(struct comp_system base, struct comp_system_transform *sys_transf)
 {
     struct comp_system_interpolator *sys = malloc(sizeof(struct comp_system_interpolator));
@@ -514,19 +530,6 @@ struct comp_system_interpolator *comp_system_interpolator_create(struct comp_sys
     return sys;
 }
 DEFINE_POOL_BASED_EMPLACE_ERASE_GET(interpolator)
-void comp_system_interpolator_to_target(struct comp_system_interpolator *sys, entity_t entity, struct transform target)
-{
-    struct comp_transform      *transf = comp_system_transform_get(sys->sys_transf, entity);
-    struct comp_interpolator   *interp = comp_pool_interpolator_try_get(&sys->pool, entity);
-    if (!interp) {
-        LOG("COMP_INTERP: (warn) interpolator for entity %d doesn't exist. Can't switch target.");
-    }
-    interp->target_delta    = transform_delta(transf->data, target);
-    interp->start_time      = get_monotonic_time();
-    interp->start_transform = transf->data;
-}
-
-
 static float ease_in(float t)
 {
     return t*t;
@@ -535,6 +538,87 @@ static float ease_out(float t)
 {
     return 1 - ease_in(1-t);
 }
+static float calc_factor(struct interpolation_opt *opt, double elapsed)
+{
+    double duration, 
+           factor;
+    duration = opt->ease_in + opt->linear2/2 + opt->ease_out;
+    if (!duration) return 1;
+
+    if (opt->ease_in && opt->ease_in >= elapsed)
+        factor = ease_in(elapsed/opt->ease_in) * opt->ease_in / duration;
+    else if (opt->linear2/2 >= (elapsed - opt->ease_in))
+        factor = elapsed / duration;
+    else if (opt->ease_out && opt->ease_out >= (elapsed -= opt->ease_in + opt->linear2/2))
+        factor = (opt->ease_in + opt->linear2/2 + ease_out( elapsed / opt->ease_out) * opt->ease_out) / duration;
+    else
+        factor = 1;
+
+    return factor;
+}
+void comp_system_interpolator_finish(struct comp_system_interpolator *sys, entity_t entity)
+{
+    struct comp_interpolator   *interp = comp_pool_interpolator_try_get(&sys->pool, entity);
+    struct comp_transform      *transf;
+
+    if (!interp->start_time)
+        return;
+    interp->start_time = 0;
+
+    transf = comp_system_transform_get(sys->sys_transf, entity);
+    transform_interpolate(&transf->data, &interp->start_transform, &interp->target_delta, 1);
+    comp_system_transform_desync(sys->sys_transf, entity);
+}
+void comp_system_interpolator_start(struct comp_system_interpolator *sys, entity_t entity, struct transform target)
+{
+    struct comp_transform      *transf = comp_system_transform_get(sys->sys_transf, entity);
+    struct comp_interpolator   *interp = comp_pool_interpolator_try_get(&sys->pool, entity);
+    if (!interp) {
+        LOGF("COMP_INTERP: (warn) interpolator for entity %d doesn't exist. Can't start new target.", entity);
+        return;
+    }
+
+    comp_system_interpolator_finish(sys, entity);
+    interp->target_delta    = transform_delta(transf->data, target);
+    interp->start_time      = get_monotonic_time();
+    interp->start_transform = transf->data;
+}
+
+void comp_system_interpolator_change(struct comp_system_interpolator *sys, entity_t entity, struct transform target)
+{
+    struct comp_transform      *transf = comp_system_transform_get(sys->sys_transf, entity);
+    struct comp_interpolator   *interp = comp_pool_interpolator_try_get(&sys->pool, entity);
+    double                      now, elapsed, duration,
+                                factor;
+    vec3                        denom, factor_vec;
+
+    if (!interp) {
+        LOGF("COMP_INTERP: (warn) interpolator for entity %d doesn't exist. Can't change target.", entity);
+        return;
+    }
+    if (!interp->start_time) {
+        comp_system_interpolator_start(sys, entity, target);
+        return;
+    }
+
+    now = get_monotonic_time();
+    elapsed = now - interp->start_time;
+    factor = calc_factor(&interp->opt, elapsed);
+
+    if (factor == 1) {
+        interp->start_transform = transf->data;
+        interp->target_delta    = TRANSFORM_ZERO;
+        return;
+    }
+
+    /* start == (current - target*factor) / (1 - factor) */
+    interp->start_transform.trans   = vec3_div_f(vec3_sum(transf->data.trans, vec3_mult_f(target.trans, -factor)), 1-factor);
+    interp->start_transform.rot     = vec3_div_f(vec3_sum(transf->data.rot, vec3_mult_f(target.rot, -factor)), 1-factor);
+    interp->start_transform.scale   = vec3_div_f(vec3_sum(transf->data.scale, vec3_mult_f(target.scale, -factor)), 1-factor);
+
+    interp->target_delta    = transform_delta(interp->start_transform, target);
+}
+
 void comp_system_interpolator_update(struct comp_system_interpolator *sys)
 {
     int i;
@@ -542,45 +626,27 @@ void comp_system_interpolator_update(struct comp_system_interpolator *sys)
     struct comp_interpolator   *interp;
     struct comp_transform      *transf;
     float                       elapsed,
-                                duration,
                                 factor;
     vec3                        factor_vec;
     double                      now = get_monotonic_time();
 
     for (i = 0; i < sys->pool.len; i++) {
         interp = sys->pool.data + i;
-        if (interp->start_time == 0)
-            continue;
+        if (interp->start_time == 0) continue;
 
         elapsed = now - interp->start_time;
-        duration = interp->ease_in + interp->linear2/2 + interp->ease_out;
 
         entity = sys->pool.dense[i];
         transf = comp_pool_transform_try_get(&sys->sys_transf->pool, entity);
         if (!transf) {
-            LOG("COMP_INTERP: (warn) transform for entity %d doesn't exist. Can't lerp.");
+            LOGF("COMP_INTERP: (warn) transform for entity %d doesn't exist. Can't lerp.", entity);
             continue;
         }
 
-        if (interp->ease_in >= elapsed)
-            factor = ease_in(elapsed/interp->ease_in) * interp->ease_in / duration;
+        factor = calc_factor(&interp->opt, elapsed);
+        if (factor == 1) interp->start_time = 0;
 
-        else if (interp->linear2/2 >= (elapsed - interp->ease_in))
-            factor = elapsed / duration;
-
-        else if (interp->ease_out >= (elapsed -= interp->ease_in + interp->linear2/2))
-            factor = (interp->ease_in + interp->linear2/2 + ease_out( elapsed / interp->ease_out) * interp->ease_out) / duration;
-
-        else {
-            interp->start_time = 0;
-            factor = 1;
-        }
-
-
-        factor_vec = vec3_all(factor);
-        transf->data.trans  = vec3_sum(interp->start_transform.trans, vec3_mult(interp->target_delta.trans, factor_vec));
-        transf->data.rot    = vec3_sum(interp->start_transform.rot, vec3_mult(interp->target_delta.rot, factor_vec));
-        transf->data.scale  = vec3_sum(interp->start_transform.scale, vec3_mult(interp->target_delta.scale, factor_vec));
+        transform_interpolate(&transf->data, &interp->start_transform, &interp->target_delta, factor);
         comp_system_transform_desync(sys->sys_transf, entity);
     }
 }

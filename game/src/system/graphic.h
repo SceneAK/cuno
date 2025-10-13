@@ -17,7 +17,7 @@ struct graphic_session_info graphic_session_info_get(struct graphic_session *ses
 int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle);
 
 struct graphic_texture;
-struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap, char texture_mask);
+struct graphic_texture *graphic_texture_create(int width, int height, const unsigned char *bitmap, char is_mask);
 void graphic_texture_destroy(struct graphic_texture *texture);
 
 struct graphic_vertecies;

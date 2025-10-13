@@ -86,13 +86,16 @@ struct comp_hitrect {
     unsigned char               hitstate;
     unsigned char               hitmask;
 };
+struct interpolation_opt {
+    double                      ease_in,
+                                linear2,
+                                ease_out;
+};
 struct comp_interpolator {
     struct transform            target_delta;
     struct transform            start_transform;
     double                      start_time;
-    float                       ease_in,
-                                linear2,
-                                ease_out;
+    struct interpolation_opt    opt;
 };
 struct comp_system_family;
 struct comp_system_transform;
@@ -132,7 +135,9 @@ struct comp_hitrect *comp_system_hitrect_get(struct comp_system_hitrect *sys, en
 void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
 
 void comp_interpolator_set_default(struct comp_interpolator *interpolator);
-void comp_system_interpolator_to_target(struct comp_system_interpolator *sys, entity_t entity, struct transform target);
+void comp_system_interpolator_finish(struct comp_system_interpolator *sys, entity_t entity);
+void comp_system_interpolator_start(struct comp_system_interpolator *sys, entity_t entity, struct transform target);
+void comp_system_interpolator_change(struct comp_system_interpolator *sys, entity_t entity, struct transform target);
 struct comp_system_interpolator *comp_system_interpolator_create(struct comp_system base, struct comp_system_transform *sys_transf);
 struct comp_interpolator *comp_system_interpolator_emplace(struct comp_system_interpolator *sys, entity_t entity);
 void comp_system_interpolator_erase(struct comp_system_interpolator *sys, entity_t entity);

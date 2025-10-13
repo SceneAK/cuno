@@ -21,6 +21,8 @@ static const float  NEAR                = 0.2f;
 static const float  FAR                 = 2048.0f;
 static const float  FOV_DEG             = 90;
 
+static const float  ENTITY_CARD_DIST = 3.5f;
+
 static const rect2D CARD_BOUNDS         = { -1.0f, -1.5f,   1.0f,  1.5f };
 static const float  CARD_VERTS_RAW[]    = {
     CARD_BOUNDS.x0,  CARD_BOUNDS.y0, 0.0f, 0.0f, 0.0f,
@@ -33,7 +35,7 @@ static const float  CARD_VERTS_RAW[]    = {
 };
 static const struct transform           DISCARD_PILE_TRANSFORM = {
     {0, 0, -5},
-    {0, 0, PI/32},
+    {PI/32, PI/32, PI/32},
     {0.4, 0.4, 0.4}
 };
 static const struct transform           DRAW_PILE_TRANSFORM = {
@@ -92,7 +94,7 @@ void cleanup_recorded_component_flags(entity_t entity)
         comp_system_interpolator_erase(sys_interp, entity);
 }
 
-void layer_discards()
+void arrange_discards()
 {
     const float LAYER_DIST = 0.5f;
     struct transform target = DISCARD_PILE_TRANSFORM;
@@ -100,16 +102,8 @@ void layer_discards()
 
     for (i = 0; i < entity_discards.len; i++) {
         target.trans.z = DISCARD_PILE_TRANSFORM.trans.z - LAYER_DIST * (entity_discards.len - 1 - i);
-        comp_system_interpolator_to_target(sys_interp, entity_discards.elements[i], target);
+        comp_system_interpolator_change(sys_interp, entity_discards.elements[i], target);
     }
-}
-static void discard_entity_card(entity_t card)
-{
-    struct comp_interpolator   *interp;
-    entity_t                    last;
-
-    comp_system_interpolator_to_target(sys_interp, card, DISCARD_PILE_TRANSFORM);
-    entity_list_append(&entity_discards, &card, 1);
 }
 static entity_t entity_card_create(const struct card *card)
 {
@@ -134,8 +128,8 @@ static entity_t entity_card_create(const struct card *card)
     visual->vertecies       = card_vertecies;
     visual->texture         = NULL;
     visual->color           = card_color_to_rgb(card->color);
-    interp->ease_in         = 0.1f;
-    interp->ease_out        = 0.2f;
+    interp->opt.ease_in     = 0.1f;
+    interp->opt.ease_out    = 0.2f;
     global_card_ids[main]   = card->id;
 
     text                    = entity_record_activate(&entity_record);
@@ -197,64 +191,71 @@ static void entity_card_destroy(entity_t main)
 }
 static void free_old_discards()
 {
-    int i;
-    for (i = 0; i < entity_discards.len-1; i++)
-        entity_card_destroy(entity_discards.elements[i]);
-    entity_discards.elements[0] = entity_discards.elements[entity_discards.len-1];
-    entity_discards.len = 1;
+    const size_t    FIRST = 0;
+    const int       MIN_LEN = 4;
+    int             new_len,
+                    i;
+
+    if (entity_discards.len < MIN_LEN) return;
+    new_len = entity_discards.len/2;
+
+    for (i = 0; i < new_len; i++) entity_card_destroy(entity_discards.elements[i]);
+    for (i = 0; i < new_len; i++) entity_list_remove_sft(&entity_discards, &FIRST, 1);
 }
 
 static void entity_player_add_cards(entity_t player, const struct card *cards, int amount)
 {
-    const float            DIST = 3.5f;
-    entity_t               entity_card,
-                           entity_card_last;
-    struct comp_transform *transf,
-                           transf_last;
-    int                    i;
+    entity_t                entity_card;
+    struct comp_transform  *comp_transf_card;
+    struct transform        transf,
+                            transf_draw_pile_local;
+    int                     i, child_count;
 
-    entity_card_last = comp_system_family_find_last_child(sys_family, player);
-    if (entity_card_last == ENTITY_INVALID)
-        comp_transform_set_default(&transf_last);
-    else
-        transf_last = *comp_system_transform_get(sys_transf, entity_card_last);
+    transf = comp_system_transform_get(sys_transf, player)->data;
+
+    transf_draw_pile_local  = transform_relative(&transf, &DRAW_PILE_TRANSFORM);
+
+    child_count = comp_system_family_count_children(sys_family, player);
+    entity_card = comp_system_family_find_last_child(sys_family, player);
 
     for (i = 0; i < amount; i++) {
-        entity_card     = entity_card_create(cards + i);
-        comp_system_family_adopt(sys_family, player, entity_card);
+        entity_card         = entity_card_create(cards + i);
+        comp_transf_card    = comp_system_transform_get(sys_transf, entity_card);
 
-        transf          = comp_system_transform_get(sys_transf, entity_card);
-        transf->data.trans   = vec3_create(transf_last.data.trans.x + DIST, 0, 0);
-        transf->data.rot     = vec3_create(0, -PI/12, 0);
         comp_system_transform_desync(sys_transf, entity_card);
-
-        transf_last = *transf;
+        comp_system_family_adopt(sys_family, player, entity_card);
+        
+        transf              = comp_transf_card->data;
+        transf.trans.x      = ENTITY_CARD_DIST * (child_count + i);
+        transf.rot          = vec3_create(0, -PI/8, 0);
+        comp_transf_card->data = transf_draw_pile_local;
+        comp_system_interpolator_start(sys_interp, entity_card, transf);
     }
 }
 static int entity_player_remove_card(entity_t entity_card)
 {
-    struct comp_transform              *transf, 
-                                        transf_current,
-                                        transf_last;
+    struct transform                    target;
     entity_t                            current;
     struct comp_system_family_view      family_view;
+    int                                 counter;
 
-    current = entity_card;
-    if (entity_is_invalid(current))
+    if (entity_is_invalid(entity_card))
         return -1;
     family_view = comp_system_family_view(sys_family);
+    current = family_view.first_child_map[family_view.parent_map[entity_card]];
+    target = comp_system_transform_get(sys_transf, current)->data;
     
-    while (!entity_is_invalid(current)) {
-        transf = comp_system_transform_get(sys_transf, current);
-        transf_current = *transf;
-        transf->data.trans = transf_last.data.trans;
-        comp_system_transform_desync(sys_transf, current);
+    for (counter = 0; current != entity_card; counter++) current = family_view.sibling_map[current];
+    current = family_view.sibling_map[current];
+    
+    while(!entity_is_invalid(current)) {
+        target.trans.x = ENTITY_CARD_DIST * counter;
+        comp_system_interpolator_change(sys_interp, current, target);
 
-        transf_last = transf_current;
         current = family_view.sibling_map[current];
+        counter++;
     }
-    transf       = comp_system_transform_get(sys_transf, entity_card);
-    transf->data = comp_system_transform_get_world(sys_transf, entity_card);
+    comp_system_transform_get(sys_transf, entity_card)->data = comp_system_transform_get_world(sys_transf, entity_card);
     comp_system_family_disown(sys_family, entity_card);
     comp_system_transform_desync(sys_transf, entity_card);
     return 0;
@@ -285,15 +286,15 @@ static void represent_current_turn() /* very stupid */
                 if (card_id == game_state->top_card.id)
                     top_card = current;
                 else
-                    discard_entity_card(current);
+                    entity_list_append(&entity_discards, &current, 1);
             }
 
             current = next;
         }
         if (top_card != ENTITY_INVALID)
-            discard_entity_card(top_card);
+            entity_list_append(&entity_discards, &top_card, 1);
         else LOG("Could not find final discard");
-        layer_discards();
+        arrange_discards();
     } else if (game_state->acted == DRAW) {
         free_old_discards();
 
@@ -378,6 +379,8 @@ static void entities_init()
     struct comp_visual      *visual;
     struct comp_hitrect     *hitrect;
 
+    entity_t temp;
+
     entity_players[0]   = entity_player_create(game_state->players + 0);
     transf              = comp_system_transform_get(sys_transf, entity_players[0]);
     transf->data.trans       = vec3_create(-4.5f, -5.5, -10);
@@ -393,7 +396,9 @@ static void entities_init()
     transf->synced      = 0;
 
     entity_list_init(&entity_discards, 1);
-    discard_entity_card(entity_card_create(&game_state->top_card));
+    temp = entity_card_create(&game_state->top_card);
+    entity_list_append(&entity_discards, &temp, 1);
+    comp_system_interpolator_change(sys_interp, temp, DISCARD_PILE_TRANSFORM);
 
     entity_act_button   = entity_record_activate(&entity_record);
     transf              = comp_system_transform_emplace(sys_transf, entity_act_button);
@@ -410,7 +415,7 @@ static void entities_init()
     visual->color       = vec3_create(1, 0.321568627, 0.760784314);
     hitrect->rect       = CARD_BOUNDS;
     hitrect->type       = RECT_ORTHOSPACE;
-    hitrect->hitmask    = HITMASK_MOUSE_DOWN;
+    hitrect->hitmask    = HITMASK_MOUSE_DOWN | HITMASK_MOUSE_UP | HITMASK_MOUSE_HOVER;
 
     entity_debug_text   = entity_record_activate(&entity_record);
     transf              = comp_system_transform_emplace(sys_transf, entity_debug_text);
@@ -468,7 +473,10 @@ void game_mouse_event(struct mouse_event event)
 
     hitrect = comp_system_hitrect_get(sys_hitrect, entity_act_button);
     if (hitrect->hitstate) {
-        comp_system_visual_get(sys_visual, entity_act_button)->color.x *= -1;
+        if (event.type == MOUSE_DOWN)
+            comp_system_visual_get(sys_visual, entity_act_button)->color.x *= -1;
+        else 
+            clear_color.x *= -1;
         if (!game_state->ended) {
             supersmartAI_act(&game_state_mut);
 
@@ -483,9 +491,11 @@ void game_mouse_event(struct mouse_event event)
 }
 void game_update()
 {
-    comp_system_transform_sync_matrices(sys_transf);
-    comp_system_interpolator_update(sys_interp);
     if (!session)
         return;
+
+    comp_system_transform_sync_matrices(sys_transf);
+    comp_system_interpolator_update(sys_interp);
+
     render();
 }

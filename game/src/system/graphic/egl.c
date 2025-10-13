@@ -13,6 +13,7 @@ struct graphic_session {
     EGLConfig   config;
     EGLContext  context;
     EGLSurface  surface;
+    void       *natwin;
 };
 
 static const EGLint dpy_required_attr[] = {
@@ -43,16 +44,16 @@ static const char* egl_err_to_str(EGLint err)
         default: return "UNKNOWN";
     }
 }
-
 struct graphic_session *graphic_session_create()
 {
     EGLint num_config;
     struct graphic_session *session = malloc(sizeof(struct graphic_session));
+    memset(session, 0, sizeof(struct graphic_session));
 
     if (!session)
         return NULL;
 
-    session->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    session->display = eglGetDisplay(EGL_DEFAULT_DISPLAY); 
     if (session->display == EGL_NO_DISPLAY)
         goto err;
 
@@ -61,7 +62,7 @@ struct graphic_session *graphic_session_create()
 
     if (eglChooseConfig(session->display, dpy_required_attr, &session->config, 1, &num_config) != EGL_TRUE)
         goto err;
-    
+
     return session;
 
 err:
@@ -83,9 +84,12 @@ int graphic_session_destroy(struct graphic_session *session)
 static void on_graphic_ready();
 int graphic_session_reset_window(struct graphic_session *session, void *native_window_handle)
 {
+    session->natwin = native_window_handle;
+
     eglMakeCurrent(session->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     if (session->surface != NULL)
         eglDestroySurface(session->display, session->surface);
+
     session->surface = eglCreateWindowSurface(session->display, session->config, (NativeWindowType)native_window_handle, NULL);
 
     eglBindAPI(EGL_OPENGL_ES_API);
@@ -112,8 +116,10 @@ struct graphic_session_info graphic_session_info_get(struct graphic_session *ses
 
 /* END OF EGL. START OF GL */
 
-void graphic_clear(float r, float g, float b)
+void graphic_clear(GLfloat r, GLfloat g, GLfloat b)
 {
+    if (eglGetCurrentSurface(EGL_DRAW) == EGL_NO_SURFACE || eglGetCurrentContext() == EGL_NO_CONTEXT)
+        LOG("NO SURFACE/CONTEXT");
     glClearColor(r, g, b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glFlush();
@@ -121,7 +127,10 @@ void graphic_clear(float r, float g, float b)
 
 void graphic_render(struct graphic_session *session)
 {
-    eglSwapBuffers(session->display, session->surface);
+    if (eglGetCurrentSurface(EGL_DRAW) == EGL_NO_SURFACE)
+        LOG("NO SURFACE");
+    if (!eglSwapBuffers(session->display, session->surface))
+        LOGF("Post-Swap error: 0x%04x",  eglGetError());
 }
 
 static GLuint default_program;
@@ -171,10 +180,10 @@ static void on_graphic_ready()
 
 struct graphic_texture {
     GLuint  gltex;
-    float   width, height;
+    int     width, height;
     char    is_mask;
 };
-struct graphic_texture *graphic_texture_create(float width, float height, const unsigned char *bitmap, char is_mask)
+struct graphic_texture *graphic_texture_create(int width, int height, const unsigned char *bitmap, char is_mask)
 {
     struct graphic_texture *texture = malloc(sizeof(struct graphic_texture));
     if (!texture)

@@ -278,7 +278,7 @@ int supersmartAI_act(struct game_state *game)
     if (game->acted) 
         return 0;
 
-    indices = malloc( sizeof(int) * player->hand.len );
+    indices = malloc( sizeof(size_t) * player->hand.len );
     if (indices == NULL)
         return -1;
 

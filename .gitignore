@@ -25,3 +25,6 @@ compile_commands.json
 # Personal files
 *.env
 CMakeUserPresets.json
+
+# nvim
+*.swp

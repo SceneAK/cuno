@@ -1,21 +1,31 @@
 #ifndef MATH_H
 #define MATH_H
+
 #define PI 3.141592653589793
 #define DEG_TO_RAD(deg) (deg * PI/180)
+
 
 typedef struct { float m[4][4]; } mat4;
 
 typedef struct { float x, y; } vec2;
 typedef struct { float x, y, z; } vec3;
 
-static const vec3 VEC3_ONE = { 1, 1, 1 };
-static const vec3 VEC3_ONE_NEG = { -1, -1, -1 };
-static const vec3 VEC3_ZERO  = { 0, 0, 0 };
+static const vec3 VEC3_ONE  = { 1, 1, 1 };
+static const vec3 VEC3_ZERO = { 0, 0, 0 };
+
+static const mat4 MAT4_IDENTITY  =  { {
+        { 1, 0, 0, 0 },
+        { 0, 1, 0, 0 },
+        { 0, 0, 1, 0 },
+        { 0, 0, 0, 1 }, } };
+
 
 struct transform {
     vec3    trans, rot, scale;
 };
 static const struct transform TRANSFORM_ZERO = {0};
+
+static struct transform a, b;
 
 /* VECTORS */
 static vec2 vec2_create(float x, float y)
@@ -55,6 +65,33 @@ static vec3 vec3_mult(vec3 a, vec3 b)
     };
     return product;
 }
+static vec3 vec3_mult_f(vec3 a, float f)
+{
+    vec3 product = {
+        a.x * f,
+        a.y * f,
+        a.z * f
+    };
+    return product;
+}
+static vec3 vec3_div(vec3 num, vec3 den)
+{
+    vec3 product = {
+        num.x / den.x,
+        num.y / den.y,
+        num.z / den.z
+    };
+    return product;
+}
+static vec3 vec3_div_f(vec3 num, float f)
+{
+    vec3 product = {
+        num.x / f,
+        num.y / f,
+        num.z / f
+    };
+    return product;
+}
 static void vec3_mult_ptr(vec3 *a, vec3 b)
 {
     a->x *= b.x;
@@ -79,14 +116,9 @@ static vec3 vec3_mult_mat4(mat4 mat, vec3 vec, float w)
 /* TRANSFORM */
 struct transform transform_delta(struct transform transform, struct transform target);
 struct transform transform_from_mat4(mat4 mat);
+struct transform transform_relative(const struct transform *parent, const struct transform *subject);
 
 /* MATRIX - Expected Row-Major */
-static const mat4 MAT4_IDENTITY  =  { {
-        { 1, 0, 0, 0 },
-        { 0, 1, 0, 0 },
-        { 0, 0, 1, 0 },
-        { 0, 0, 0, 1 }, } };
-
 mat4 mat4_scale(vec3 vec);
 mat4 mat4_trans(vec3 vec);
 mat4 mat4_rotx(float rad);

@@ -8,8 +8,8 @@ struct codepoint {
 };
 struct baked_font {
     unsigned char       *bitmap;
-    float                width;
-    float                height;
+    unsigned int         width,
+                         height;
 
     struct codepoint    *cps;
     size_t               cps_len;
