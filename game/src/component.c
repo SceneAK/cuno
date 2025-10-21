@@ -465,8 +465,9 @@ void comp_hitrect_set_default(struct comp_hitrect *hitrect)
 
     hitrect->type               = RECT_CAMSPACE;
     hitrect->rect               = RECT2D_ZERO;
-    hitrect->hitstate           = 0;
-    hitrect->hitmask            = 1;
+    hitrect->hitmask            = 0;
+    hitrect->state              = 0;
+    hitrect->active             = 1;
 }
 struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, struct comp_system_transform *sys_transf)
 {
@@ -480,7 +481,20 @@ struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, 
     return sys;
 }
 DEFINE_POOL_BASED_EMPLACE_ERASE_GET(hitrect)
-void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask)
+int comp_system_hitrect_check_clear(struct comp_system_hitrect *sys, entity_t entity)
+{
+    struct comp_hitrect *hitrect = comp_system_hitrect_get(sys, entity);
+
+    if (NULL)
+        return 0;
+
+    if (!hitrect->state)
+        return 0;
+
+    hitrect->state = 0;
+    return 1;
+}
+void comp_system_hitrect_update(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask)
 {
     struct comp_hitrect   *hitrect;
     struct comp_transform *transf;
@@ -488,9 +502,12 @@ void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, con
 
     for (i = 0; i < system->pool.len; i++) {
         hitrect = system->pool.data + i;
+        if (hitrect->state)
+            continue;
+
         transf  = comp_system_transform_get(system->sys_transf, system->pool.dense[i]);
 
-        if (!transf | !(hitrect->hitmask & mask))
+        if (!transf || !hitrect->active || !(hitrect->hitmask & mask))
             continue;
 
         if (hitrect->cached_version != transf->matrix_version) {
@@ -499,9 +516,9 @@ void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, con
         }
 
         if (hitrect->type == RECT_CAMSPACE)
-            hitrect->hitstate = origin_ray_intersects_rect(&hitrect->rect, &hitrect->cached_matrix_inv, *mouse_camspace_ray);
+            hitrect->state = origin_ray_intersects_rect(&hitrect->rect, &hitrect->cached_matrix_inv, *mouse_camspace_ray);
         else 
-            hitrect->hitstate = point_lands_on_rect(&hitrect->rect, &hitrect->cached_matrix_inv, vec3_create(mouse_ortho->x, mouse_ortho->y, 0));
+            hitrect->state = point_lands_on_rect(&hitrect->rect, &hitrect->cached_matrix_inv, vec3_create(mouse_ortho->x, mouse_ortho->y, 0));
     }
 }
 
@@ -578,7 +595,6 @@ void comp_system_interpolator_start(struct comp_system_interpolator *sys, entity
         return;
     }
 
-    comp_system_interpolator_finish(sys, entity);
     interp->target_delta    = transform_delta(transf->data, target);
     interp->start_time      = get_monotonic_time();
     interp->start_transform = transf->data;

@@ -37,7 +37,7 @@ static entity_t entity_record_activate(struct entity_record *entrec)
 static int entity_record_deactivate(struct entity_record *entrec, entity_t entity)
 {
     if (entrec->component_flags[entity]) {
-        LOGF("ENTREC: (warn) entity %d can't deactivate due to its non-zero signature (%d)", entity, entrec->component_flags[entity]);
+        LOGF("ENTREC: (warn) entity %d can't deactivate due to its non-zero component flags (%d)", entity, entrec->component_flags[entity]);
         return -1;
     }
     return entrec->active[entity] = 0;
@@ -83,8 +83,9 @@ struct comp_hitrect {
         RECT_ORTHOSPACE
     }                           type;
     rect2D                      rect;
-    unsigned char               hitstate;
+    unsigned char               state;
     unsigned char               hitmask;
+    unsigned char               active;
 };
 struct interpolation_opt {
     double                      ease_in,
@@ -132,7 +133,8 @@ struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, 
 struct comp_hitrect *comp_system_hitrect_emplace(struct comp_system_hitrect *sys, entity_t entity);
 void comp_system_hitrect_erase(struct comp_system_hitrect *sys, entity_t entity);
 struct comp_hitrect *comp_system_hitrect_get(struct comp_system_hitrect *sys, entity_t entity);
-void comp_system_hitrect_update_hitstate(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
+int comp_system_hitrect_check_clear(struct comp_system_hitrect *sys, entity_t entity);
+void comp_system_hitrect_update(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
 
 void comp_interpolator_set_default(struct comp_interpolator *interpolator);
 void comp_system_interpolator_finish(struct comp_system_interpolator *sys, entity_t entity);

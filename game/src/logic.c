@@ -1,8 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "system/log.h"
 #include "logic.h"
 #include "gmath.h"
+#include "utils.h"
 
 #define DIV_255(val) val/255.0f
 
@@ -24,14 +26,13 @@ vec3 card_color_to_rgb(enum card_color color)
     }
 }
 
-static card_id_t card_count = 0;
-static void rand_card(struct card *card)
+static void rand_card(struct card *card, card_id_t id)
 {
-    const float RATIO = RAND_MAX / 110;
+    const float RATIO = RAND_MAX / 110.0;
     int random;
 
     random = rand();
-    card->id    = card_count++;
+    card->id    = id;
     card->color = random % 4;
 
     if ( random <= RATIO * 76 ) {
@@ -56,49 +57,24 @@ static void rand_card(struct card *card)
         card->color = BLACK;
     }
     else if ( random <= RATIO * 110 ) {
-        card->type  = SWAP;
+        /*card->type  = SWAP;*/
+        card->type  = PICK_COLOR;
         card->color = BLACK;
     }
 }
-static void rand_cards(struct card *cards, int amount)
+
+static void append_player_rand_cards(struct game_state *state, int player_index, int amount)
 {
     int i;
-    for (i = 0; i < amount; i++) {
-        rand_card(cards + i);
-    }
+    struct card *card = card_list_emplace(&state->players[player_index].hand, amount);
+
+    for (i = 0; i < amount; i++)
+        rand_card(card + i, state->card_id_last++);
 }
 
-int card_find_index(const struct player *player, card_id_t id)
+static void remove_player_card(struct player *player, card_id_t card)
 {
-    int i;
-
-    for (i = 0; i < player->hand.len; i++) {
-        if (player->hand.elements[i].id == id)
-            return i;
-    }
-    return -1;
-}
-
-void cards_find_indices(int *indices, const struct player *player, size_t *ids, int len)
-{
-    int i, j, indices_index = 0;
-
-    for (i = 0; i < player->hand.len; i++) {
-        for (j = 0; j < len; j++)
-            if (player->hand.elements[i].id == ids[j])
-                indices[indices_index++] = i;
-    }
-}
-
-static void append_cards(struct player *player, int amount)
-{
-    card_list_append_new(&player->hand, amount);
-    rand_cards(player->hand.elements + player->hand.len - amount, amount);
-}
-
-static void remove_cards(struct player *player, const size_t *indices, size_t len)
-{
-    card_list_remove_swp(&player->hand, indices, len);
+    size_t index = array_list_index_of(id, &player->hand, card);
 }
 
 #define card_same_color(a, b) ((a).color == (b).color)
@@ -134,121 +110,144 @@ static int play_card_effect(struct game_state *game, struct card *card, enum car
     return 0;
 }
 
-void game_state_init(struct game_state *game, int player_len)
+void game_state_init(struct game_state *game, int player_len, int deal)
 {
+    int i;
     game->active_player_index = 0;
     game->turn          = 0;
-    game->player_len    = player_len;
-    game->players       = malloc( game->player_len*sizeof(struct player) );
+    game->player_len    = min(player_len, PLAYER_MAX);
     game->ended         = 0;
     game->turn_dir      = 1;
     game->skip_pool     = 0;
     game->batsu_pool    = 0;
-    srand(1);
-    do 
-        rand_card(&game->top_card); 
+    memset(game->players, 0, sizeof(game->players));
+
+    for (i = 0; i < game->player_len; i++) {
+        card_list_init(&game->players[i].hand, deal);
+        append_player_rand_cards(game, i, deal);
+    }
+
+    do
+        rand_card(&game->top_card, game->card_id_last++); 
     while (game->top_card.type == PLUS4 || game->top_card.type == PICK_COLOR);
     play_card_effect(game, &game->top_card, -2);
 }
 
-void deal_cards(struct game_state *game, int deal_per_player)
+void game_state_deinit(struct game_state *game)
 {
     int i;
+    for (i = 0; i < game->player_len; i++)
+        card_list_deinit(&game->players[i].hand);
+}
 
-    for (i = 0; i < game->player_len; i++) {
-        game->players[i].id = i;
-        card_list_init(&game->players[i].hand, deal_per_player);
+void game_state_copy(struct game_state *dst, const struct game_state *src)
+{
+    struct game_state *old_dst = dst;
+    struct game_state new_dst;
+    int i;
 
-        append_cards(game->players + i, deal_per_player);
+    memcpy(&new_dst, src, sizeof(struct game_state));
+
+    for (i = 0; i < old_dst->player_len && i < src->player_len; i++) {
+        card_list_copy(&old_dst->players[i].hand, &src->players[i].hand);
+        new_dst.players[i].hand = old_dst->players[i].hand;
     }
+    for (; i < old_dst->player_len; i++)
+        card_list_deinit(&old_dst->players[i].hand);
+
+    for (; i < src->player_len; i++)
+        new_dst.players[i].hand = card_list_clone(&src->players[i].hand);
+
+    memcpy(dst, &new_dst, sizeof(struct game_state));
 }
 
-int is_legal_draw(const struct game_state *game)
+int game_state_can_act_draw(const struct game_state *game)
 {
-    return !game->ended && !game->acted;
+    return !game->ended && !game->act;
 }
+
 /* ACTS */
-int act_draw_cards(struct game_state *game, size_t *amount_drawn)
+int game_state_act_draw(struct game_state *game)
 {
-    struct player *player = game->players + game->active_player_index;
-    *amount_drawn = 1;
+    int amount = 1;
 
-    if (!is_legal_draw(game))
+    if (!game_state_can_act_draw(game))
         return -1;
 
     if (game->batsu_pool) {
-        *amount_drawn = game->batsu_pool;
+        amount = game->batsu_pool;
         game->batsu_pool = 0;
     }
 
-    append_cards(player, *amount_drawn);
+    append_player_rand_cards(game, game->active_player_index, amount);
 
-    game->acted = DRAW;
+    game->act = ACT_DRAW;
     return 0;
 }
 
-
-int is_legal_play(const struct game_state *game, const size_t *indices, int len)
+int game_state_can_act_play(const struct game_state *game, card_id_t card_id)
 {
-    int i, j, same_type, same_color;
-    const struct card *active_hand, *card, *previous_card;
+    int                     i, j, 
+                            same_type, same_color;
+    const struct card      *card;
+    int                     card_index;
+    const struct card_list *hand;
 
-    if (game->ended || !len)
+    if (game->ended)
         return 0;
 
-    previous_card = &game->top_card;
-    active_hand = game->players[game->active_player_index].hand.elements;
+    hand = &game->players[game->active_player_index].hand;
 
-    for (i = 0; i < len; i++) {
-        card = active_hand + indices[i];
-        same_type = card_same_type(*previous_card, *card);
-        same_color = card_same_color(*previous_card, *card);
+    card_index = array_list_index_of(id, hand, card_id);
+    if (card_index == -1)
+        return 0;
 
-        if (i == 0) {
-            if (game->batsu_pool && !same_type && card->type != PLUS4)
-                return 0;
-            if (!same_color && !same_type && card->color != BLACK)
-                return 0;
-        }
-        else if (!same_type)
-            return 0;
+    card = hand->elements + card_index;
 
-        /* check duplicates */
-        for (j = 0; j < i; j++)
-            if (indices[i] == indices[j])
-                return 0;
+    same_type = card_same_type(game->top_card, *card);
+    same_color = card_same_color(game->top_card, *card);
 
-        previous_card = card;
-    }
-    return 1;
+    if (game->act == ACT_PLAY)
+        return same_type;
+
+    if (game->batsu_pool && !same_type && card->type != PLUS4)
+        return 0;
+
+    return same_color || same_type || card->color == BLACK;
 }
 
-/* If shifting noticably impacts, combine follow-ups into one play. */
-int act_play_card(struct game_state *game, const size_t *indices, int len)
+int game_state_act_play(struct game_state *game, card_id_t card_id)
 {
-    struct player *player = game->players + game->active_player_index;
-    struct card *last_card;
-    int i;
+    struct player  *player  = game->players + game->active_player_index;
+    size_t          index   = array_list_index_of(id, &player->hand, card_id);
 
-    if (!is_legal_play(game, indices, len))
+    if (!game_state_can_act_play(game, card_id))
         return -1;
 
-    for (i = 0; i < len; i++) {
-        last_card = (struct card *)player->hand.elements + indices[i];
-        play_card_effect(game, last_card, RED);
-    }
-    game->top_card = *last_card;
-    game->acted = PLAY;
+    game->top_card = player->hand.elements[index];
+    play_card_effect(game, &game->top_card, RED);
+    card_list_remove_swp(&player->hand, &index, 1);
 
-    remove_cards(player, indices, len);
+    game->act = ACT_PLAY;
     return 0;
 }
+card_id_t *game_state_act_play_mult(struct game_state *game, card_id_t *card_ids, size_t len)
+{
+    int i = 0;
+    for (i = 0; i < len; i++) {
+        if (game_state_act_play(game, card_ids[i]) == 0)
+            continue;
 
-int end_turn(struct game_state *game)
+        return card_ids + i;
+    }
+    return NULL;
+}
+
+int game_state_end_turn(struct game_state *game)
 {
     int increment;
 
-    if (game->ended || !game->acted)
+    if (game->ended || !game->act)
         return -1;
 
     if (game->players[game->active_player_index].hand.len == 0) {
@@ -263,40 +262,29 @@ int end_turn(struct game_state *game)
     if (game->active_player_index < 0)
         game->active_player_index += game->player_len;
 
-    game->acted = 0;
+    game->act = ACT_NONE;
     game->turn++;
     return 0;
 }
 
 
-int supersmartAI_act(struct game_state *game)
+int game_state_act_auto(struct game_state *game)
 {
-    struct player *player = game->players + game->active_player_index;
-    size_t i, cards_drawn;
-    size_t *indices, indices_len = 0;
+    struct player      *player = game->players + game->active_player_index;
+    size_t              i;
 
-    if (game->acted) 
+    if (game->act) 
         return 0;
-
-    indices = malloc( sizeof(size_t) * player->hand.len );
-    if (indices == NULL)
-        return -1;
 
     for (i = 0; i < player->hand.len; i++) {
-        indices[indices_len] = i;
-        if (is_legal_play(game, indices, indices_len + 1)) {
-            indices_len++;
+        if (game_state_act_play(game, player->hand.elements[i].id) == 0)
             i = 0;
-        }
     } 
-    if (indices_len != 0 && act_play_card(game, indices, indices_len) == 0) {
-        free(indices); 
+
+    if (game->act)
         return 0;
-    }
-    else {
-        free(indices);
-        return act_draw_cards(game, &cards_drawn) == 0 ? 0 : -2;
-    }
+    else
+        return game_state_act_draw(game) == 0 ? 0 : -2;
 }
 
 /* LOGGING & DEBUGGING */
@@ -368,14 +356,14 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
         "GAME_STATE\n"
         "========== TURN %d =========\n"
         " - ended: %i\n"
-        " - acted: %i\n"
+        " - act: %i\n"
         " - turn_dir: %i\n"
         " - skip_pool: %i\n"
         " - batsu_pool: %i\n"
         " - active_player_index: %i\n",
         game->turn,
         game->ended,
-        game->acted,
+        game->act,
         game->turn_dir,
         game->skip_pool,
         game->batsu_pool,

@@ -5,6 +5,7 @@
 #include "utils.h"
 
 #define is_pickable_color(color) ( 0 <= (color) && (color) <= 3 )
+#define PLAYER_MAX 5
 
 typedef unsigned short card_id_t;
 struct card {
@@ -30,21 +31,22 @@ struct card {
 };
 DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
 struct player {
-    short               id;
     char               *name;
     struct card_list    hand;
 };
 struct game_state {
+    card_id_t       card_id_last;
+
     int             turn;
     char            ended;
-    struct player  *players;
+    struct player   players[PLAYER_MAX];
     int             player_len;
     int             active_player_index;
     enum action {
-        NONE,
-        PLAY,
-        DRAW,
-    } acted;
+        ACT_NONE,
+        ACT_PLAY,
+        ACT_DRAW,
+    } act;
 
     struct card     top_card;
     int             turn_dir;
@@ -53,18 +55,17 @@ struct game_state {
 };
 
 vec3 card_color_to_rgb(enum card_color color);
-int card_find_index(const struct player *player, card_id_t id);
-void cards_find_indices(int *indices, const struct player *player, size_t *ids, int len);
 
-void game_state_init(struct game_state *game, int player_len);
-void deal_cards(struct game_state *game, int deal_per_player);
-int is_legal_draw(const struct game_state *game);
-int is_legal_play(const struct game_state *game, const size_t *indices, int len);
-int act_draw_cards(struct game_state *game, size_t *amount_drawn);
-int act_play_card(struct game_state *game, const size_t *indices, int len);
-int end_turn(struct game_state *game);
+void game_state_copy(struct game_state *dst, const struct game_state *src);
+void game_state_init(struct game_state *game, int player_len, int deal);
+void game_state_deinit(struct game_state *game);
 
-int supersmartAI_act(struct game_state *game);
+int game_state_can_act_draw(const struct game_state *game);
+int game_state_can_act_play(const struct game_state *game, card_id_t card_id);
+int game_state_act_draw(struct game_state *game);
+int game_state_act_play(struct game_state *game, card_id_t card_id);
+int game_state_act_auto(struct game_state *game);
+int game_state_end_turn(struct game_state *game);
 
 const char *card_type_to_str(enum card_type card_type);
 const char *card_color_to_str(enum card_color color);

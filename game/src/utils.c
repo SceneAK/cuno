@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include "system/log.h"
 #include "utils.h"
 
 
@@ -14,7 +15,7 @@ void array_list_deinit(struct array_list *list)
 {
     free(list->elements);
 }
-void *array_list_append_new(struct array_list *list, size_t len, size_t elem_size)
+void *array_list_emplace(struct array_list *list, size_t len, size_t elem_size)
 {
     list->len += len;
     if (list->len > list->allocated_len) {
@@ -26,19 +27,30 @@ void *array_list_append_new(struct array_list *list, size_t len, size_t elem_siz
 }
 void array_list_append(struct array_list *list, const void *items, size_t len, size_t elem_size)
 {
-    memcpy(array_list_append_new(list, len, elem_size), items, elem_size * len);
+    memcpy(array_list_emplace(list, len, elem_size), items, elem_size * len);
 }
 void array_list_remove_sft(struct array_list *list, const size_t *indices, size_t len, size_t elem_size)
 {
     int i, advance = 0;
     char *marked = calloc(list->len, sizeof(char));
+
+    if (!list->len) {
+        LOG("ARLST: (warn) Tried to remove_sft an empty list");
+        free(marked);
+        return;
+    }
+
     for (i = 0; i < len; i++) {
         marked[indices[i]] = 1;
     }
-    for (i = 0; (i + advance) < list->len; i++) {
-        while (marked[i + advance]) 
+    i = 0;
+    while (i + advance < list->len) {
+        if(marked[i + advance]) {
             advance++;
+            continue;
+        }
         memcpy((char *)list->elements + i * elem_size, (char *)list->elements + (i + advance) * elem_size, elem_size);
+        i++;
     }
     list->len -= len;
     free(marked);
@@ -47,6 +59,13 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
 {
     int i, swap_index = list->len;
     char *marked = calloc(list->len, sizeof(char));
+
+    if (!list->len) {
+        LOG("ARLST: (warn) Tried to remove_swp an empty list");
+        free(marked);
+        return;
+    }
+
     for (i = 0; i < len; i++) {
         marked[indices[i]] = 1;
     }
@@ -60,4 +79,17 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     }
     list->len -= len;
     free(marked);
+}
+
+int array_list_index_of_field(const struct array_list *list, size_t elem_size, size_t field_offset, const void *val_ptr, size_t field_size)
+{
+    size_t i;
+    void *field;
+    for (i = 0; i < list->len; i++) {
+        field = (char *)(list->elements) + i*elem_size  + field_offset;
+        
+        if (memcmp(field, val_ptr, field_size) == 0) 
+            return i;
+    }
+    return -1;
 }
