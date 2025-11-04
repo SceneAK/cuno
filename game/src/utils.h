@@ -6,23 +6,20 @@
 #define max(a, b) ( a > b ? a : b )
 #define min(a, b) ( a < b ? a : b )
 
+//#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+
 struct array_list {
     void   *elements;
     size_t  len;
     size_t  allocated_len;
 };
+
 void array_list_init(struct array_list *list, size_t initial_alloc_len, size_t elem_size);
 void array_list_deinit(struct array_list *list);
 void *array_list_emplace(struct array_list *list, size_t len, size_t elem_size);
 void array_list_append(struct array_list *list, const void *items, size_t len, size_t elem_size);
 void array_list_remove_sft(struct array_list *list, const size_t *indices, size_t len, size_t elem_size);
 void array_list_remove_swp(struct array_list *list, const size_t *indices, size_t len, size_t elem_size);
-int array_list_index_of_field(const struct array_list *list, size_t elem_size, size_t field_offset, const void *val_ptr, size_t field_size);
-
-
-#define array_list_index_of(field, list_ptr, val) \
-    ((list_ptr)->len < 1 ? -1 : \
-        array_list_index_of_field((const struct array_list *)(list_ptr), sizeof(*(list_ptr)->elements), (char *)(&(list_ptr)->elements->field) - (char *)((list_ptr)->elements), &(val), sizeof(val)))
 
 #define DEFINE_ARRAY_LIST_WRAPPER(static_inline, type, name) \
     struct name { \

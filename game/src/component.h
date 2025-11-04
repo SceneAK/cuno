@@ -67,25 +67,35 @@ struct comp_transform {
     unsigned short              matrix_version;
     mat4                        matrix;
 };
-enum projection_type { PROJ_ORTHO, PROJ_PERSP };
+enum projection_type { 
+    PROJ_ORTHO, 
+    PROJ_PERSP,
+};
+enum draw_pass_type {
+    DRAW_PASS_NONE = -1,
+    DRAW_PASS_OPAQUE,
+    DRAW_PASS_TRANSPARENT,
+};
 struct comp_visual {
     struct graphic_vertecies   *vertecies;
     struct graphic_texture     *texture;
     vec3                        color;
-    short                       draw_pass;
+    enum draw_pass_type         draw_pass;
+};
+enum hitrect_type {
+    HITRECT_CAMSPACE, 
+    HITRECT_ORTHOSPACE
 };
 struct comp_hitrect {
     mat4                        cached_matrix_inv;
     unsigned short              cached_version;
 
-    enum {
-        RECT_CAMSPACE, 
-        RECT_ORTHOSPACE
-    }                           type;
     rect2D                      rect;
+    enum hitrect_type           type;
     unsigned char               state;
     unsigned char               hitmask;
     unsigned char               active;
+    void                        (*hit_handler)(entity_t entity, struct comp_hitrect *hitrect);
 };
 struct interpolation_opt {
     double                      ease_in,
@@ -133,7 +143,8 @@ struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, 
 struct comp_hitrect *comp_system_hitrect_emplace(struct comp_system_hitrect *sys, entity_t entity);
 void comp_system_hitrect_erase(struct comp_system_hitrect *sys, entity_t entity);
 struct comp_hitrect *comp_system_hitrect_get(struct comp_system_hitrect *sys, entity_t entity);
-int comp_system_hitrect_check_clear(struct comp_system_hitrect *sys, entity_t entity);
+void comp_system_hitrect_clear_states(struct comp_system_hitrect *sys);
+int comp_system_hitrect_check_and_clear_state(struct comp_system_hitrect *sys, entity_t entity);
 void comp_system_hitrect_update(struct comp_system_hitrect *system, const vec2 *mouse_ortho, const vec3 *mouse_camspace_ray, char mask);
 
 void comp_interpolator_set_default(struct comp_interpolator *interpolator);

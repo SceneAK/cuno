@@ -3,7 +3,6 @@
 #include "system/log.h"
 #include "utils.h"
 
-
 /* ARRAY LIST */
 void array_list_init(struct array_list *list, size_t initial_alloc_len, size_t elem_size)
 {
@@ -79,17 +78,4 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     }
     list->len -= len;
     free(marked);
-}
-
-int array_list_index_of_field(const struct array_list *list, size_t elem_size, size_t field_offset, const void *val_ptr, size_t field_size)
-{
-    size_t i;
-    void *field;
-    for (i = 0; i < list->len; i++) {
-        field = (char *)(list->elements) + i*elem_size  + field_offset;
-        
-        if (memcmp(field, val_ptr, field_size) == 0) 
-            return i;
-    }
-    return -1;
 }

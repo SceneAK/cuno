@@ -394,7 +394,7 @@ void comp_visual_set_default(struct comp_visual *visual)
     visual->vertecies       = NULL;
     visual->texture         = NULL;
     visual->color           = VEC3_ZERO;
-    visual->draw_pass       = 0;
+    visual->draw_pass       = DRAW_PASS_OPAQUE;
 }
 struct comp_system_visual *comp_system_visual_create(struct comp_system base, struct comp_system_transform *sys_transf)
 {
@@ -430,19 +430,21 @@ static void comp_visual_transform_pool_draw(struct comp_pool_visual *pool, struc
 {
     struct comp_visual    *visual;
     struct comp_transform *transf;
-    short                  pass = 0,
-                           total_pass = 1;
+    enum draw_pass_type    pass = 0,
+                           final_pass = 1;
     int i;
 
-    for(; pass < total_pass; pass++) {
+    for(; pass <= final_pass; pass++) {
         for (i = 0; i < pool->len; i++) {
             visual = pool->data + i;
-            transf = comp_pool_transform_try_get(pool_transf, pool->dense[i]);
-
             if (visual->draw_pass > pass) {
-                total_pass = visual->draw_pass + 1;
+                final_pass = visual->draw_pass;
                 continue;
             }
+            if (visual->draw_pass != pass)
+                continue;
+
+            transf = comp_pool_transform_try_get(pool_transf, pool->dense[i]);
 
             graphic_draw(visual->vertecies, 
                          visual->texture, 
@@ -463,11 +465,12 @@ void comp_hitrect_set_default(struct comp_hitrect *hitrect)
     hitrect->cached_matrix_inv  = MAT4_IDENTITY;
     hitrect->cached_version     = 0;
 
-    hitrect->type               = RECT_CAMSPACE;
+    hitrect->type               = HITRECT_CAMSPACE;
     hitrect->rect               = RECT2D_ZERO;
     hitrect->hitmask            = 0;
     hitrect->state              = 0;
     hitrect->active             = 1;
+    hitrect->hit_handler        = NULL;
 }
 struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, struct comp_system_transform *sys_transf)
 {
@@ -481,7 +484,14 @@ struct comp_system_hitrect *comp_system_hitrect_create(struct comp_system base, 
     return sys;
 }
 DEFINE_POOL_BASED_EMPLACE_ERASE_GET(hitrect)
-int comp_system_hitrect_check_clear(struct comp_system_hitrect *sys, entity_t entity)
+void comp_system_hitrect_clear_states(struct comp_system_hitrect *sys)
+{
+    int i;
+    for (i = 0; i < sys->pool.len; i++) {
+        sys->pool.data[i].state = 0;
+    }
+}
+int comp_system_hitrect_check_and_clear_state(struct comp_system_hitrect *sys, entity_t entity)
 {
     struct comp_hitrect *hitrect = comp_system_hitrect_get(sys, entity);
 
@@ -515,10 +525,16 @@ void comp_system_hitrect_update(struct comp_system_hitrect *system, const vec2 *
             hitrect->cached_matrix_inv = mat4_invert(transf->matrix);
         }
 
-        if (hitrect->type == RECT_CAMSPACE)
-            hitrect->state = origin_ray_intersects_rect(&hitrect->rect, &hitrect->cached_matrix_inv, *mouse_camspace_ray);
+        if (hitrect->type == HITRECT_CAMSPACE)
+            hitrect->state = origin_ray_intersects_rect(&hitrect->rect, &hitrect->cached_matrix_inv, *mouse_camspace_ray) ? mask : 0;
         else 
-            hitrect->state = point_lands_on_rect(&hitrect->rect, &hitrect->cached_matrix_inv, vec3_create(mouse_ortho->x, mouse_ortho->y, 0));
+            hitrect->state = point_lands_on_rect(&hitrect->rect, &hitrect->cached_matrix_inv, vec3_create(mouse_ortho->x, mouse_ortho->y, 0)) ? mask : 0;
+    }
+
+    for (i = 0; i < system->pool.len; i++) {
+        hitrect = system->pool.data + i;
+        if (hitrect->hit_handler && hitrect->state)
+            hitrect->hit_handler(system->pool.dense[i], hitrect);
     }
 }
 

@@ -1,65 +1,78 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "system/log.h"
 #include "logic.h"
 #include "gmath.h"
 #include "utils.h"
 
 #define DIV_255(val) val/255.0f
+#define card_same_color(a, b) ((a).color == (b).color)
+#define card_same_type(a, b) ((a).type == (b).type) \
+                        && ((a).type != CARD_NUMBER || (a).num == (b).num)
 
 vec3 card_color_to_rgb(enum card_color color)
 {
     switch (color) {
-        case RED:
+        case CARD_COLOR_RED:
             return vec3_create(DIV_255(255), DIV_255(45), DIV_255(45));
-        case GREEN:
+        case CARD_COLOR_GREEN:
             return vec3_create(DIV_255(44), DIV_255(255), DIV_255(83));
-        case BLUE:
+        case CARD_COLOR_BLUE:
             return vec3_create(DIV_255(44), DIV_255(114), DIV_255(255));
-        case YELLOW:
+        case CARD_COLOR_YELLOW:
             return vec3_create(DIV_255(255), DIV_255(220), DIV_255(44));
-        case BLACK:
+        case CARD_COLOR_BLACK:
             return VEC3_ZERO;
         default:
             return vec3_create(DIV_255(255), DIV_255(0), DIV_255(255));
     }
 }
 
-static void rand_card(struct card *card, card_id_t id)
+const struct card *active_player_find_card(const struct game_state *game, card_id_t card_id)
+{
+    int i;
+    const struct player *player = game->players + game->active_player_index;
+
+    for (i = 0; i <  player->hand.len; i++) {
+        if (player->hand.elements[i].id == card_id)
+            return player->hand.elements + i;
+    }
+    return NULL;
+}
+
+static void card_random(struct card *card, card_id_t id)
 {
     const float RATIO = RAND_MAX / 110.0;
-    int random;
+    int random = rand();
 
-    random = rand();
-    card->id    = id;
-    card->color = random % 4;
+    card->id            = id;
+    card->color         = random % 4;
 
     if ( random <= RATIO * 76 ) {
-        card->type = NUMBER;
+        card->type = CARD_NUMBER;
         card->num  = random % 10;
     }
     else if ( random <= RATIO * 84 )
-        card->type = REVERSE;
+        card->type = CARD_REVERSE;
 
     else if ( random <= RATIO * 92 )
-        card->type = SKIP;
+        card->type = CARD_SKIP;
 
     else if ( random <= RATIO * 100 )
-        card->type = PLUS2;
-
+        card->type = CARD_PLUS2;
+    
     else if ( random <= RATIO * 104 ) {
-        card->type  = PICK_COLOR;
-        card->color = BLACK;
+        card->color = CARD_COLOR_BLACK;
+        card->type  = CARD_PICK_COLOR;
     }
     else if ( random <= RATIO * 108 ) {
-        card->type  = PLUS4;
-        card->color = BLACK;
+        card->color = CARD_COLOR_BLACK;
+        card->type  = CARD_PLUS4;
     }
     else if ( random <= RATIO * 110 ) {
-        /*card->type  = SWAP;*/
-        card->type  = PICK_COLOR;
-        card->color = BLACK;
+        card->color = CARD_COLOR_BLACK;
+        /* card->type  = CARD_SWAP; */
+        card->type  = CARD_PICK_COLOR;
     }
 }
 
@@ -69,39 +82,47 @@ static void append_player_rand_cards(struct game_state *state, int player_index,
     struct card *card = card_list_emplace(&state->players[player_index].hand, amount);
 
     for (i = 0; i < amount; i++)
-        rand_card(card + i, state->card_id_last++);
+        card_random(card + i, state->card_id_last++);
 }
 
-static void remove_player_card(struct player *player, card_id_t card)
+void card_get_arg_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card)
 {
-    size_t index = array_list_index_of(id, &player->hand, card);
+    memset(arg_specs, 0, sizeof(enum play_arg_type) * PLAY_ARG_MAX);
+    if (card->color == CARD_COLOR_BLACK)
+        arg_specs[0] = PLAY_ARG_COLOR;
+    if (card->type == CARD_SWAP)
+        arg_specs[1] = PLAY_ARG_PLAYER;
 }
-
-#define card_same_color(a, b) ((a).color == (b).color)
-#define card_same_type(a, b) ((a).type == (b).type) \
-                        && ((a).type != NUMBER || (a).num == (b).num)
-
-static int play_card_effect(struct game_state *game, struct card *card, enum card_color arg_color)
+static int play_card_effect(struct game_state *game, struct card *card, const struct play_arg args[PLAY_ARG_MAX])
 {
+    struct card_list temp;
+
+    if (card->color == CARD_COLOR_BLACK && args[0].type == PLAY_ARG_COLOR)
+        card->color = args[0].u.color;
+
     switch (card->type) {
-        case REVERSE:
+        case CARD_REVERSE:
             game->turn_dir *= -1;
             break;
 
-        case SKIP:
+        case CARD_SKIP:
             game->skip_pool += 1;
             break;
 
-        case PLUS2:
+        case CARD_PLUS2:
             game->batsu_pool += 2;
             break;
 
-        case PLUS4:
+        case CARD_PLUS4:
             game->batsu_pool += 4;
-        case PICK_COLOR:
-            if (!is_pickable_color(arg_color))
-                return -1;
-            card->color = arg_color;
+            break;
+
+        case CARD_SWAP:
+            if (args[1].type != PLAY_ARG_PLAYER)
+                break;
+            temp = game->players[game->active_player_index].hand;
+            game->players[game->active_player_index].hand = game->players[args[1].u.player_idx].hand;
+            game->players[args[1].u.player_idx].hand = temp;
             break;
 
         default:
@@ -113,13 +134,14 @@ static int play_card_effect(struct game_state *game, struct card *card, enum car
 void game_state_init(struct game_state *game, int player_len, int deal)
 {
     int i;
-    game->active_player_index = 0;
-    game->turn          = 0;
-    game->player_len    = min(player_len, PLAYER_MAX);
-    game->ended         = 0;
-    game->turn_dir      = 1;
-    game->skip_pool     = 0;
-    game->batsu_pool    = 0;
+
+    game->active_player_index   = 0;
+    game->turn                  = 0;
+    game->player_len            = min(player_len, PLAYER_MAX);
+    game->ended                 = 0;
+    game->turn_dir              = 1;
+    game->skip_pool             = 0;
+    game->batsu_pool            = 0;
     memset(game->players, 0, sizeof(game->players));
 
     for (i = 0; i < game->player_len; i++) {
@@ -128,9 +150,9 @@ void game_state_init(struct game_state *game, int player_len, int deal)
     }
 
     do
-        rand_card(&game->top_card, game->card_id_last++); 
-    while (game->top_card.type == PLUS4 || game->top_card.type == PICK_COLOR);
-    play_card_effect(game, &game->top_card, -2);
+        card_random(&game->top_card, game->card_id_last++); 
+    while (game->top_card.type == CARD_PICK_COLOR);
+    play_card_effect(game, &game->top_card, PLAY_ARGS_ZERO);
 }
 
 void game_state_deinit(struct game_state *game)
@@ -161,12 +183,12 @@ void game_state_copy(struct game_state *dst, const struct game_state *src)
     memcpy(dst, &new_dst, sizeof(struct game_state));
 }
 
+
+/* ACTS */
 int game_state_can_act_draw(const struct game_state *game)
 {
     return !game->ended && !game->act;
 }
-
-/* ACTS */
 int game_state_act_draw(struct game_state *game)
 {
     int amount = 1;
@@ -185,62 +207,66 @@ int game_state_act_draw(struct game_state *game)
     return 0;
 }
 
-int game_state_can_act_play(const struct game_state *game, card_id_t card_id)
+int game_state_can_act_play(const struct game_state *game, struct act_play play)
 {
     int                     i, j, 
                             same_type, same_color;
-    const struct card      *card;
-    int                     card_index;
+    const struct card      *card = NULL;
     const struct card_list *hand;
+    enum play_arg_type      specs[PLAY_ARG_MAX];
 
     if (game->ended)
         return 0;
 
     hand = &game->players[game->active_player_index].hand;
-
-    card_index = array_list_index_of(id, hand, card_id);
-    if (card_index == -1)
+    for (i = 0; i < hand->len; i++) {
+        if (hand->elements[i].id == play.card_id)
+            break;
+    }
+    if (i == hand->len)
         return 0;
+    card = hand->elements + i;
 
-    card = hand->elements + card_index;
+    card_get_arg_specs(specs, card);
+    for (i = 0; i < PLAY_ARG_MAX && specs[i] != PLAY_ARG_NONE; i++) {
+        if (play.args[i].type != specs[i])
+            return 0;
+    }
 
-    same_type = card_same_type(game->top_card, *card);
-    same_color = card_same_color(game->top_card, *card);
+    same_type   = card_same_type(game->top_card, *card);
+    same_color  = card_same_color(game->top_card, *card);
 
     if (game->act == ACT_PLAY)
         return same_type;
 
-    if (game->batsu_pool && !same_type && card->type != PLUS4)
+    if (game->batsu_pool && !same_type && card->type != CARD_PLUS4)
         return 0;
 
-    return same_color || same_type || card->color == BLACK;
+    return same_color || same_type || card->color == CARD_COLOR_BLACK;
 }
 
-int game_state_act_play(struct game_state *game, card_id_t card_id)
+int game_state_act_play(struct game_state *game, struct act_play play)
 {
     struct player  *player  = game->players + game->active_player_index;
-    size_t          index   = array_list_index_of(id, &player->hand, card_id);
+    size_t  index;
 
-    if (!game_state_can_act_play(game, card_id))
+    for (index = 0; index < player->hand.len; index++) {
+        if (player->hand.elements[index].id == play.card_id)
+            break;
+    }
+
+    if (index == player->hand.len)
+        return -1;
+
+    if (!game_state_can_act_play(game, play))
         return -1;
 
     game->top_card = player->hand.elements[index];
-    play_card_effect(game, &game->top_card, RED);
+    play_card_effect(game, &game->top_card, play.args);
     card_list_remove_swp(&player->hand, &index, 1);
 
     game->act = ACT_PLAY;
     return 0;
-}
-card_id_t *game_state_act_play_mult(struct game_state *game, card_id_t *card_ids, size_t len)
-{
-    int i = 0;
-    for (i = 0; i < len; i++) {
-        if (game_state_act_play(game, card_ids[i]) == 0)
-            continue;
-
-        return card_ids + i;
-    }
-    return NULL;
 }
 
 int game_state_end_turn(struct game_state *game)
@@ -272,12 +298,17 @@ int game_state_act_auto(struct game_state *game)
 {
     struct player      *player = game->players + game->active_player_index;
     size_t              i;
+    struct act_play     act_play = {0};
+    
+    act_play.args[0].type = PLAY_ARG_COLOR;
+    act_play.args[1].type = PLAY_ARG_PLAYER;
 
     if (game->act) 
         return 0;
 
     for (i = 0; i < player->hand.len; i++) {
-        if (game_state_act_play(game, player->hand.elements[i].id) == 0)
+        act_play.card_id = player->hand.elements[i].id;
+        if (game_state_act_play(game, act_play) == 0)
             i = 0;
     } 
 
@@ -291,19 +322,19 @@ int game_state_act_auto(struct game_state *game)
 const char *card_type_to_str(enum card_type card_type)
 {
     switch (card_type) {
-        case NUMBER:
+        case CARD_NUMBER:
             return "number";
-        case REVERSE:
+        case CARD_REVERSE:
             return "reverse";
-        case SKIP:
+        case CARD_SKIP:
             return "skip";
-        case PLUS2:
+        case CARD_PLUS2:
             return "plus 2";
-        case PICK_COLOR:
+        case CARD_PICK_COLOR:
             return "pick color";
-        case PLUS4:
+        case CARD_PLUS4:
             return "plus 4";
-        case SWAP:
+        case CARD_SWAP:
             return "swap";
         default:
             return "Undefined card_type";
@@ -312,15 +343,15 @@ const char *card_type_to_str(enum card_type card_type)
 const char *card_color_to_str(enum card_color color)
 {
     switch (color) {
-        case RED:
+        case CARD_COLOR_RED:
             return "red";
-        case GREEN:
+        case CARD_COLOR_GREEN:
             return "green";
-        case BLUE:
+        case CARD_COLOR_BLUE:
             return "blue";
-        case YELLOW:
+        case CARD_COLOR_YELLOW:
             return "yellow";
-        case BLACK:
+        case CARD_COLOR_BLACK:
             return "black";
         default:
             return "Undefined card_color";
@@ -331,7 +362,7 @@ size_t log_card(char *buffer, size_t buffer_len, const struct card *card)
 {
     const char *card_type = card_type_to_str(card->type);
     const char *card_color = card_color_to_str(card->color);
-    if (card->type == NUMBER)
+    if (card->type == CARD_NUMBER)
         return snprintf(buffer, buffer_len, "card(%d) [%s] (%s) (%i)\n", card->id, card_type, card_color, card->num);
     else 
         return snprintf(buffer, buffer_len, "card(%d) [%s] (%s)\n",card->id, card_type, card_color);
