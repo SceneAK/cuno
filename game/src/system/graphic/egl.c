@@ -30,7 +30,7 @@ static const EGLint ctx_required_attr[] = {
 
 static const char* egl_err_to_str(EGLint err)
 {
-    switch(err) {
+    switch (err) {
         case EGL_SUCCESS: return "EGL_SUCCESS";
         case EGL_NOT_INITIALIZED: return "EGL_NOT_INITIALIZED";
         case EGL_BAD_ACCESS: return "EGL_BAD_ACCESS";
@@ -66,7 +66,7 @@ struct graphic_session *graphic_session_create()
     return session;
 
 err:
-    LOGF("GRAPHIC: (err) From egl: %s", egl_err_to_str(eglGetError()));
+    LOGF(LOG_ERR, "GRAPHIC forwarded from EGL: %s", egl_err_to_str(eglGetError()));
     free(session);
     return NULL;
 }
@@ -97,7 +97,7 @@ int graphic_session_reset_window(struct graphic_session *session, void *native_w
         session->context = eglCreateContext(session->display, session->config, EGL_NO_CONTEXT, ctx_required_attr);
 
     if (eglMakeCurrent(session->display, session->surface, session->surface, session->context) == EGL_FALSE)  {
-        LOG("GRAPHIC: (err) Failed to make context current");
+        LOG(LOG_ERR, "GRAPHIC: Failed to make context current");
         return -1;
     }
 
@@ -119,7 +119,7 @@ struct graphic_session_info graphic_session_info_get(struct graphic_session *ses
 void graphic_clear(GLfloat r, GLfloat g, GLfloat b)
 {
     if (eglGetCurrentSurface(EGL_DRAW) == EGL_NO_SURFACE || eglGetCurrentContext() == EGL_NO_CONTEXT)
-        LOG("NO SURFACE/CONTEXT");
+        LOG(LOG_ERR, "GRAPHIC: context or suface is missing");
     glClearColor(r, g, b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glFlush();
@@ -128,9 +128,9 @@ void graphic_clear(GLfloat r, GLfloat g, GLfloat b)
 void graphic_render(struct graphic_session *session)
 {
     if (eglGetCurrentSurface(EGL_DRAW) == EGL_NO_SURFACE)
-        LOG("NO SURFACE");
+        LOG(LOG_ERR, "GRAPHIC: No surface");
     if (!eglSwapBuffers(session->display, session->surface))
-        LOGF("Post-Swap error: 0x%04x",  eglGetError());
+        LOGF(LOG_ERR, "GRAPHIC: Post-Swap error: 0x%04x",  eglGetError());
 }
 
 static GLuint default_program;
@@ -155,7 +155,7 @@ static void create_program()
     if (!linked) {
         char log[512];
         glGetProgramInfoLog(default_program, sizeof(log), NULL, log);
-        LOGF("GRAPHIC: (err) Shader compile error: %s", log);
+        LOGF(LOG_ERR, "GRAPHIC: Shader compile error: %s", log);
     }
 
     glDeleteShader(vertex_shader);

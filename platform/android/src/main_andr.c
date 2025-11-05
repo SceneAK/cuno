@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include "system/graphic.h"
 #include "system/log.h"
-#include "game.h"
+#include "gui.h"
 
-#include "assetandr.h"
+#include "asset_andr.h"
 
 static struct graphic_session *session = NULL;
 
@@ -17,7 +17,7 @@ int on_init_window(struct android_app *app)
         session = graphic_session_create();
 
     if (graphic_session_reset_window(session, app->window) != 0) {
-        LOG("ANDR: (err) reset window failed");
+        LOG(LOG_ERR, "ANDR: reset window failed");
         return -1;
     }
     return 0;
@@ -37,7 +37,7 @@ void on_app_cmd(struct android_app *app, int32_t cmd)
             ANativeWindow_acquire(app->window);
             if (on_init_window(app) != 0)
                 exit(EXIT_FAILURE);
-            if (!game_init_finished && game_init(session) != 0)
+            if (!game_init_finished && gui_init(session) != 0)
                 exit(EXIT_FAILURE);
             game_init_finished = 1;
             break;
@@ -74,7 +74,7 @@ int on_mouse_input(struct android_app *app, AInputEvent *event)
     else if (action == AMOTION_EVENT_ACTION_UP)
         mevent.type = MOUSE_UP;
 
-    game_mouse_event(mevent);
+    gui_mouse_event(mevent);
     return 1;
 }
 int on_input(struct android_app *app, AInputEvent *event)
@@ -105,6 +105,6 @@ void android_main(struct android_app *app)
         }
         if (!game_init_finished)
             continue;
-        game_update();
+        gui_update();
     }
 }

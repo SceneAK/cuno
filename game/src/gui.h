@@ -11,8 +11,8 @@ struct mouse_event {
     } type;
     float mouse_x, mouse_y;
 };
-int game_init(struct graphic_session *graphic);
-void game_update(void);
-void game_mouse_event(struct mouse_event mevent);
+int gui_init(struct graphic_session *graphic);
+void gui_update(void);
+void gui_mouse_event(struct mouse_event mouse_event);
 
 #endif

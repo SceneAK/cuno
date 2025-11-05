@@ -9,7 +9,7 @@
 //#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
 struct array_list {
-    void   *elements;
+    void   *elems;
     size_t  len;
     size_t  allocated_len;
 };
@@ -23,7 +23,7 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
 
 #define DEFINE_ARRAY_LIST_WRAPPER(static_inline, type, name) \
     struct name { \
-        type   *elements; \
+        type   *elems; \
         size_t  len; \
         size_t  allocated_len; \
     }; \
@@ -59,7 +59,7 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     { \
         name##_clear(dst); \
         name##_emplace(dst, src->len); \
-        memcpy(dst->elements, src->elements, sizeof(type) * src->len); \
+        memcpy(dst->elems, src->elems, sizeof(type) * src->len); \
     } \
     static_inline struct name name##_clone(const struct name *src) \
     { \

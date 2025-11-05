@@ -78,11 +78,11 @@ void component_pool_deinit(struct component_pool *pool)
 void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_t elem_size)
 {
     if (entity_is_invalid(entity)) {
-        LOG("COMP: (warn) Entity is invalid. Cannot emplace.");
+        LOG(LOG_WARN, "COMP: Entity is invalid. Cannot emplace.");
         return NULL;
     }
     if (pool->sparse[entity] != -1) {
-        LOGF("COMP: (warn) Component for entity %d already exists. Cannot emplace.", entity);
+        LOGF(LOG_WARN, "COMP: Component for entity %d already exists. Cannot emplace.", entity);
         return NULL;
     }
 
@@ -101,11 +101,11 @@ int component_pool_erase(struct component_pool *pool, entity_t entity, size_t el
     entity_t last_entity;
 
     if (entity_is_invalid(entity)) {
-        LOG("COMP: (warn) Entity invalid. Cannot erase.");
+        LOG(LOG_WARN, "COMP: Entity invalid. Cannot erase.");
         return -1;
     }
     if (pool->sparse[entity] == -1) {
-        LOG("COMP: (warn) Component for this entity doesn't exist. Cannot erase.");
+        LOG(LOG_WARN, "COMP: Component for this entity doesn't exist. Cannot erase.");
         return -2;
     }
 
@@ -208,7 +208,7 @@ size_t comp_system_family_count_children(struct comp_system_family *sys, entity_
     entity_t    current;
 
     if (entity_is_invalid(entity)) {
-        LOG("COMPSYS_FAM: (warn) Entity is invalid. Cannot count children.");
+        LOG(LOG_WARN, "COMPSYS_FAM: Entity is invalid. Cannot count children.");
         return SIZE_MAX;
     }
 
@@ -316,13 +316,13 @@ void comp_system_transform_desync(struct comp_system_transform *sys, entity_t en
     struct comp_transform *transf;
 
     if (entity_is_invalid(entity)) {
-        LOG("COMP_TRANSF: (warn) Entity invalid. Cannot update changes.");
+        LOG(LOG_WARN, "COMP_TRANSF: Entity invalid. Cannot update changes.");
         return;
     }
 
     transf = comp_pool_transform_try_get(&sys->pool, entity);
     if (!transf) {
-        LOG("COMP_TRANSF: (warn) Entity does not have transform. Cannot update changes.");
+        LOG(LOG_WARN, "COMP_TRANSF: Entity does not have transform. Cannot update changes.");
         return;
     }
 
@@ -607,7 +607,7 @@ void comp_system_interpolator_start(struct comp_system_interpolator *sys, entity
     struct comp_transform      *transf = comp_system_transform_get(sys->sys_transf, entity);
     struct comp_interpolator   *interp = comp_pool_interpolator_try_get(&sys->pool, entity);
     if (!interp) {
-        LOGF("COMP_INTERP: (warn) interpolator for entity %d doesn't exist. Can't start new target.", entity);
+        LOGF(LOG_WARN, "COMP_INTERP: interpolator for entity %d doesn't exist. Can't start new target.", entity);
         return;
     }
 
@@ -625,7 +625,7 @@ void comp_system_interpolator_change(struct comp_system_interpolator *sys, entit
     vec3                        denom, factor_vec;
 
     if (!interp) {
-        LOGF("COMP_INTERP: (warn) interpolator for entity %d doesn't exist. Can't change target.", entity);
+        LOGF(LOG_WARN, "COMP_INTERP: interpolator for entity %d doesn't exist. Can't change target.", entity);
         return;
     }
     if (!interp->start_time) {
@@ -671,7 +671,7 @@ void comp_system_interpolator_update(struct comp_system_interpolator *sys)
         entity = sys->pool.dense[i];
         transf = comp_pool_transform_try_get(&sys->sys_transf->pool, entity);
         if (!transf) {
-            LOGF("COMP_INTERP: (warn) transform for entity %d doesn't exist. Can't lerp.", entity);
+            LOGF(LOG_WARN, "COMP_INTERP: transform for entity %d doesn't exist. Can't lerp.", entity);
             continue;
         }
 

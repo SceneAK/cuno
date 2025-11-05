@@ -1,7 +1,7 @@
 #include <android/asset_manager.h>
 #include "system/asset.h"
 #include "system/log.h"
-#include "assetandr.h"
+#include "asset_andr.h"
 
 static AAssetManager *mngr = NULL;
 
@@ -15,7 +15,7 @@ asset_handle asset_open(const char *asset_path)
 {
     asset_handle handle = AAssetManager_open(mngr, asset_path, AASSET_MODE_BUFFER);
     if (!handle)
-        LOGF("ASSET: (err) Asset Management failed te open resource \"%s\"", asset_path);
+        LOGF(LOG_ERR, "ASSET: Asset Management failed te open resource \"%s\"", asset_path);
     return handle;
 }
 

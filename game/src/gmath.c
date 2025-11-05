@@ -130,7 +130,7 @@ mat4 mat4_invert(mat4 mat)
 
         pivot = mat.m[pivot_row][pivot_col];
         if (pivot == 0) {
-            LOG("mat4 not invertible");
+            LOG(LOG_WARN, "MATH: mat4 not invertible!");
             return MAT4_IDENTITY;
         }
 

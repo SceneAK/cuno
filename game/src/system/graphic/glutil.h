@@ -11,7 +11,7 @@ static GLuint compile_shader(GLenum type, const char* source) {
     if (!compiled) {
         char log[512];
         glGetShaderInfoLog(shader, sizeof(log), NULL, log);
-        LOGF("ERR: Shader failed to compile with the following info: %s\n", log);
+        LOGF(LOG_ERR, "GRAPHIC: Shader failed to compile: %s\n", log);
     }
 
     return shader;

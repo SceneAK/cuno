@@ -31,13 +31,13 @@ static entity_t entity_record_activate(struct entity_record *entrec)
             entrec->active[i] = 1;
             return i;
         }
-    LOG("ENTREC: (warn) recorded entity hit ENTITY_MAX");
+    LOG(LOG_WARN, "ENTREC: recorded entity hit ENTITY_MAX");
     return ENTITY_INVALID;
 }
 static int entity_record_deactivate(struct entity_record *entrec, entity_t entity)
 {
     if (entrec->component_flags[entity]) {
-        LOGF("ENTREC: (warn) entity %d can't deactivate due to its non-zero component flags (%d)", entity, entrec->component_flags[entity]);
+        LOGF(LOG_WARN, "ENTREC: entity %d can't deactivate due to its non-zero component flags (%d)", entity, entrec->component_flags[entity]);
         return -1;
     }
     return entrec->active[entity] = 0;
@@ -46,10 +46,11 @@ DEFINE_ARRAY_LIST_WRAPPER(static, entity_t, entity_list)
 
 
 
-#define HITMASK_MOUSE_DOWN  1<<0
-#define HITMASK_MOUSE_UP    1<<1
-#define HITMASK_MOUSE_HOVER 1<<2
-#define HITMASK_MOUSE_HOLD  1<<3
+/* #define HITMASK_EXCLUSIVE   1<<0 */
+#define HITMASK_MOUSE_DOWN  1<<1
+#define HITMASK_MOUSE_UP    1<<2
+#define HITMASK_MOUSE_HOVER 1<<3
+#define HITMASK_MOUSE_HOLD  1<<4
 
 struct comp_system {
     struct entity_record   *entity_record;

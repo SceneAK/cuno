@@ -8,10 +8,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 add_subdirectory("game")
 
-if (DEBUG_HEADLESS)
-    message(STATUS "Debug (Headless) Build")
-    add_subdirectory("debug")
-elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 	message(STATUS "Android Build")
 	add_subdirectory("platform/android")
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Emscriptn")

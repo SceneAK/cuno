@@ -2,7 +2,7 @@
 #define GTIME_H
 
 #include <time.h>
-static double get_monotonic_time() 
+static double get_monotonic_time()
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);

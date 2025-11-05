@@ -34,8 +34,8 @@ const struct card *active_player_find_card(const struct game_state *game, card_i
     const struct player *player = game->players + game->active_player_index;
 
     for (i = 0; i <  player->hand.len; i++) {
-        if (player->hand.elements[i].id == card_id)
-            return player->hand.elements + i;
+        if (player->hand.elems[i].id == card_id)
+            return player->hand.elems + i;
     }
     return NULL;
 }
@@ -85,7 +85,7 @@ static void append_player_rand_cards(struct game_state *state, int player_index,
         card_random(card + i, state->card_id_last++);
 }
 
-void card_get_arg_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card)
+void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card)
 {
     memset(arg_specs, 0, sizeof(enum play_arg_type) * PLAY_ARG_MAX);
     if (card->color == CARD_COLOR_BLACK)
@@ -220,14 +220,14 @@ int game_state_can_act_play(const struct game_state *game, struct act_play play)
 
     hand = &game->players[game->active_player_index].hand;
     for (i = 0; i < hand->len; i++) {
-        if (hand->elements[i].id == play.card_id)
+        if (hand->elems[i].id == play.card_id)
             break;
     }
     if (i == hand->len)
         return 0;
-    card = hand->elements + i;
+    card = hand->elems + i;
 
-    card_get_arg_specs(specs, card);
+    card_get_arg_type_specs(specs, card);
     for (i = 0; i < PLAY_ARG_MAX && specs[i] != PLAY_ARG_NONE; i++) {
         if (play.args[i].type != specs[i])
             return 0;
@@ -251,7 +251,7 @@ int game_state_act_play(struct game_state *game, struct act_play play)
     size_t  index;
 
     for (index = 0; index < player->hand.len; index++) {
-        if (player->hand.elements[index].id == play.card_id)
+        if (player->hand.elems[index].id == play.card_id)
             break;
     }
 
@@ -261,7 +261,7 @@ int game_state_act_play(struct game_state *game, struct act_play play)
     if (!game_state_can_act_play(game, play))
         return -1;
 
-    game->top_card = player->hand.elements[index];
+    game->top_card = player->hand.elems[index];
     play_card_effect(game, &game->top_card, play.args);
     card_list_remove_swp(&player->hand, &index, 1);
 
@@ -294,10 +294,27 @@ int game_state_end_turn(struct game_state *game)
 }
 
 
+static enum card_color find_frequent_color(const struct card_list *hand)
+{
+    int             tally[CARD_COLOR_MAX] = {0};
+    enum card_color most_frequent = 0;
+    int             i;
+
+    for (i = 0; i < hand->len; i++) {
+        if (!is_pickable_color(hand->elems[i].color))
+            continue;
+
+        tally[hand->elems[i].color]++;
+        if (i == 0 || tally[most_frequent] < tally[hand->elems[i].color])
+            most_frequent = hand->elems[i].color;
+    }
+    return most_frequent;
+}
 int game_state_act_auto(struct game_state *game)
 {
     struct player      *player = game->players + game->active_player_index;
     size_t              i;
+    enum play_arg_type  arg_specs[PLAY_ARG_MAX];
     struct act_play     act_play = {0};
     
     act_play.args[0].type = PLAY_ARG_COLOR;
@@ -307,7 +324,12 @@ int game_state_act_auto(struct game_state *game)
         return 0;
 
     for (i = 0; i < player->hand.len; i++) {
-        act_play.card_id = player->hand.elements[i].id;
+        act_play.card_id = player->hand.elems[i].id;
+
+        card_get_arg_type_specs(arg_specs, player->hand.elems + i);
+        if (arg_specs[0] == PLAY_ARG_COLOR)
+            act_play.args[0].u.color = find_frequent_color(&player->hand);
+
         if (game_state_act_play(game, act_play) == 0)
             i = 0;
     } 
@@ -373,7 +395,7 @@ size_t log_hand(char *buffer, size_t buffer_len, const struct player *player)
     size_t total = 0;
     
     for (i = 0; i < player->hand.len; i++) {
-        total += log_card(buffer + total, buffer_len - total, player->hand.elements + i);
+        total += log_card(buffer + total, buffer_len - total, player->hand.elems + i);
     }
     total += snprintf(buffer + total, buffer_len - total, "Total of %lu cards\n", player->hand.len);
     return total;
@@ -391,7 +413,8 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
         " - turn_dir: %i\n"
         " - skip_pool: %i\n"
         " - batsu_pool: %i\n"
-        " - active_player_index: %i\n",
+        " - active_player_index: %i\n"
+        " - top_card: ",
         game->turn,
         game->ended,
         game->act,

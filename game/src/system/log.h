@@ -1,20 +1,22 @@
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef LOG_H
+#define LOG_H
 
-#ifdef LOG_TO_STDOUT
+#define LOG_INFO 0
+#define LOG_WARN 1
+#define LOG_ERR  2
 
-#include <stdio.h>
-#define LOG(msg) printf(msg "\n")
-#define LOGF(msg, ...) printf((msg "\n"), __VA_ARGS__)
+void cuno_logf(int lvl, const char *fmt, ...);
 
+#ifdef NDEBUG
+#define LOGF(lvl, fmt, ...) \
+    do { \
+        if (lvl != CUNO_LOG_INFO) \
+            cuno_logf(lvl, fmt, __VA_ARGS__) \
+    } while (0)
 #else
-
-#ifdef __ANDROID__
-#include <android/log.h>
-#define LOG(msg) __android_log_print(ANDROID_LOG_INFO, "CUNO", "%s", (msg))
-#define LOGF(msg, ...) __android_log_print(ANDROID_LOG_INFO, "CUNO", (msg), __VA_ARGS__)
+#define LOGF(lvl, fmt, ...) cuno_logf(lvl, fmt, __VA_ARGS__)
 #endif
 
-#endif
+#define LOG(lvl, str) cuno_logf(lvl, "%s", str)
 
 #endif

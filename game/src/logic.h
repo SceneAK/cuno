@@ -68,7 +68,7 @@ struct game_state {
     struct player       players[PLAYER_MAX];
     int                 player_len;
     int                 active_player_index;
-    enum act_type  act;
+    enum act_type       act;
 
     struct card         top_card;
     int                 turn_dir;
@@ -94,7 +94,7 @@ int game_state_end_turn(struct game_state *game);
 
 const struct card *active_player_find_card(const struct game_state *game, card_id_t card_id);
 
-void card_get_arg_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card);
+void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card);
 vec3 card_color_to_rgb(enum card_color color);
 const char *card_type_to_str(enum card_type card_type);
 const char *card_color_to_str(enum card_color color);
