@@ -455,8 +455,8 @@ static void comp_visual_transform_pool_draw(struct comp_pool_visual *pool, struc
 }
 void comp_system_visual_draw(struct comp_system_visual *sys, const mat4 *persp, const mat4 *ortho)
 {
-    comp_visual_transform_pool_draw(&sys->pool_ortho, &sys->sys_transf->pool, ortho);
     comp_visual_transform_pool_draw(&sys->pool_persp, &sys->sys_transf->pool, persp);
+    comp_visual_transform_pool_draw(&sys->pool_ortho, &sys->sys_transf->pool, ortho);
 }
 
 /* HITRECT */

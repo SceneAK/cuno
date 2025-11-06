@@ -22,7 +22,7 @@ static const float  NEAR                = 0.2f;
 static const float  FAR                 = 2048.0f;
 static const float  FOV_DEG             = 90;
 
-static const float  ENTITY_CARD_DIST = 3.5f;
+static const float  ENTITY_CARD_DIST    = 3.0f;
 
 static const rect2D CARD_BOUNDS         = { -1.0f, -1.5f,   1.0f,  1.5f };
 static const float  CARD_VERTS_RAW[]    = {
@@ -130,7 +130,7 @@ void cleanup_recorded_component_flags(entity_t entity)
 
 void entity_discards_arrange()
 {
-    const float LAYER_DIST = 0.5f;
+    const float LAYER_DIST = 0.8f;
     struct transform target = DISCARD_PILE_TRANSFORM;
     int i;
 
@@ -160,8 +160,8 @@ static entity_t entity_card_create(const struct card *card)
     comp_visual_set_default(visual);
     comp_interpolator_set_default(interp);
     comp_hitrect_set_default(hitrect);
-    transf->data.rot        = vec3_create(0, -PI/24, 0);
-    transf->data.scale      = vec3_all(1.8);
+    transf->data.rot        = vec3_create(0, -PI/16, 0);
+    transf->data.scale      = vec3_all(1.7);
     transf->synced          = 0;
     hitrect->rect           = CARD_BOUNDS;
     hitrect->type           = HITRECT_CAMSPACE;
@@ -461,14 +461,14 @@ static void entities_init()
 
     entity_players[0]       = entity_player_create(game_state->players + 0);
     transf                  = comp_system_transform_get(sys_transf, entity_players[0]);
-    transf->data.trans      = vec3_create(-4.8f, -5.5, -10);
+    transf->data.trans      = vec3_create(-4.2f, -5.5, -10);
     transf->data.rot        = vec3_create(-PI/8, 0, 0);
     transf->data.scale      = vec3_create(0.4, 0.4, 0.4); 
     transf->synced          = 0;
 
     entity_players[1]       = entity_player_create(game_state->players + 1);
     transf                  = comp_system_transform_get(sys_transf, entity_players[1]);
-    transf->data.trans      = vec3_create(-4.8f, 5.5, -10);
+    transf->data.trans      = vec3_create(-4.2f, 5.5, -10);
     transf->data.rot        = vec3_create(PI/8, 0, 0); 
     transf->data.scale      = vec3_create(0.3, 0.3, 0.3);
     transf->synced          = 0;
@@ -480,9 +480,9 @@ static void entities_init()
     comp_transform_set_default(transf);
     comp_visual_set_default(visual);
     comp_hitrect_set_default(hitrect);
-    transf->data.trans      = vec3_create(500, -900, -1);
+    transf->data.trans      = vec3_create(0, -1000, -1);
     transf->data.rot        = vec3_create(0, 0, 0);
-    transf->data.scale      = vec3_create(100, 75, 1);
+    transf->data.scale      = vec3_create(110, 78, 1);
     transf->synced          = 0;
     visual->vertecies       = card_vertecies;
     visual->color           = vec3_create(1, 0.321568627, 0.760784314);
