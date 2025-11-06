@@ -7,7 +7,7 @@
 # CMake-generated files
 /CMakeFiles/
 /CMakeCache.txt
-/Makefile
+/Makefile/
 /cmake_install.cmake
 
 # Compiler & Clang
