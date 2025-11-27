@@ -1,0 +1,18 @@
+#ifndef GAME_H
+#define GAME_H
+#include "engine/system/graphic.h"
+
+struct mouse_event {
+    enum {
+        MOUSE_HOLD,
+        MOUSE_HOVER,
+        MOUSE_DOWN,
+        MOUSE_UP
+    } type;
+    float mouse_x, mouse_y;
+};
+int game_init(struct graphic_session *graphic);
+void game_update(void);
+void game_mouse_event(struct mouse_event mouse_event);
+
+#endif
