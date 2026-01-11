@@ -8,7 +8,6 @@
 #include "engine/math.h"
 
 #include "engine/game.h"
-
 #include "logic.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
@@ -799,7 +798,7 @@ void player1_update()
     }
 }
 
-/***** GUI EVENTS *****/
+/***** GAME.H EVENTS *****/
 int game_init(struct graphic_session *created_session)
 {
     const int PLAYER_AMOUNT     = 2;
