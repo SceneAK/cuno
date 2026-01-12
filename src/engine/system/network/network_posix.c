@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include "engine/system/network.h"
+#include "engine/system/log.h"
 #include "engine/alias.h"
 
 #define IS_LITTLE_ENDIAN ( *((u8 *)&ENDIAN_TEST) == 1 )
@@ -13,21 +14,17 @@
 struct network_connection {
     int     sockfd;
     double  timeout_ms;
-
-    u8      send_header_buff[sizeof(struct network_header)];
-    size_t  send_bytes;
-
-    u8      recv_header_buff[sizeof(struct network_header)];
-    size_t  recv_bytes;
 };
 
 struct network_listener {
     int sockfd;
+    enum network_result res;
 };
 
 static const u16 ENDIAN_TEST = 1;
 
-enum network_result netres_from_errno() {
+enum network_result netres_from_errno() 
+{
     switch(errno) {
         case EAGAIN:
             return NETRES_ERR_AGAIN;
@@ -109,8 +106,10 @@ struct network_connection *network_connection_create(const char* ipv4addr, short
     memset(conn, 0, sizeof(struct network_connection));
     conn->timeout_ms = timeout_ms;
     conn->sockfd = sockfd;
+    cuno_logf(LOG_INFO, "Connected\n");
     return conn;
 err:
+    cuno_logf(LOG_ERR, "Connection Error: %s\n", strerror(errno));
     close(sockfd);
     return NULL;
 }
@@ -152,13 +151,14 @@ void network_header_deserialize(struct network_header *header, const u8 *src)
 
 enum network_result network_connection_send(struct network_connection *conn, struct network_sendbuff *sendbuff)
 {
-    const size_t    TOTAL = sizeof(sendbuff->message.m->header) + sendbuff->message.m->header.len;
-    const void      *SRC = sendbuff->message.bytes + sendbuff->head;
-    const struct network_header HEADER_COPY = sendbuff->message.m->header;
+    const size_t    TOTAL = sizeof(sendbuff->message->header) + sendbuff->message->header.len;
+    const struct network_header HEADER_COPY = sendbuff->message->header;
 
-    network_header_serialize((u8 *)&sendbuff->message.m->header, &HEADER_COPY);
-    ssize_t res = send(conn->sockfd, SRC, TOTAL - sendbuff->head, 0);
-    sendbuff->message.m->header = HEADER_COPY;
+    network_header_serialize((u8 *)&sendbuff->message->header, &HEADER_COPY);
+    ssize_t res = send(conn->sockfd,
+            (char *)sendbuff->message + sendbuff->head,
+            TOTAL - sendbuff->head, 0);
+    sendbuff->message->header = HEADER_COPY;
 
     if (res < 0)
         return netres_from_errno();
@@ -172,15 +172,19 @@ enum network_result network_connection_send(struct network_connection *conn, str
 
 enum network_result network_connection_recv(struct network_connection *conn, struct network_recvbuff *recvbuff)
 {
-    void    *dst = recvbuff->message.bytes + recvbuff->head;
-    ssize_t res;
-    size_t  total = sizeof(struct network_header);
+    size_t total = sizeof(struct network_header);
     struct network_header header_temp;
+    ssize_t res;
 
     if (recvbuff->head >= sizeof(struct network_header))
-        total += recvbuff->message.m->header.len;
+        total += recvbuff->message->header.len;
+
+    printf("recv called when head is %lu\n", recvbuff->head);
     
-    res = recv(conn->sockfd, dst, total, 0);
+    res = recv(conn->sockfd, 
+        (char *)recvbuff->message + recvbuff->head,
+        total - recvbuff->head, 0);
+
     if (res < 0)
         return netres_from_errno();
     if (res == 0)
@@ -189,8 +193,8 @@ enum network_result network_connection_recv(struct network_connection *conn, str
     recvbuff->head += res;
 
     if (recvbuff->head == sizeof(struct network_header)) {
-        network_header_deserialize(&header_temp, (u8 *)&recvbuff->message.m->header);
-        recvbuff->message.m->header = header_temp;
+        network_header_deserialize(&header_temp, (u8 *)&recvbuff->message->header);
+        recvbuff->message->header = header_temp;
         return NETRES_PARTIAL;
     }
 

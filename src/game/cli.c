@@ -21,27 +21,83 @@ static struct game_state *game_state;
 void main_server(const char *ipv4addr)
 {
     struct network_listener *listener;
+    printf("Starting server");
+}
+
+void sendstuff(struct network_connection *conn)
+{
+    int                         len;
+    enum network_result         res;
+    union {
+        unsigned char           buffer[sizeof(struct network_header) + 1024];
+        struct network_message  m;
+    }                           message;
+    struct network_sendbuff     sendbuff = { .head = 0, .message = &message.m };
+
+    printf("Type something: ");
+    scanf("%s", message.m.data);
+
+    len = strlen((char *)message.m.data);
+    printf("message length: %d\n", len);
+
+    message.m.header.version = 0;
+    message.m.header.type = 0;
+    message.m.header.len = len+1;
+    printf("sending");
+    res = network_connection_send(conn, &sendbuff);
+    printf("result: %s\n", str_network_result(res));
+    if (res != NETRES_SUCCESS)
+        exit(EXIT_FAILURE);
+}
+void recvstuff(struct network_connection *conn)
+{
+    enum network_result         res;
+    union {
+        unsigned char           buffer[sizeof(struct network_header) + 1024];
+        struct network_message  m;
+    }                           message;
+    struct network_recvbuff     recvbuff = { .head = 0, .capacity = sizeof(message), .message = &message.m };
+
+    do
+        res = network_connection_recv(conn, &recvbuff);
+    while (res == NETRES_PARTIAL);
+    printf("hdr: len %d\n", message.m.header.len);
+    printf("msg: %s\n", (char *)message.m.data);
+    printf("res: %s\n", str_network_result(res));
+    if (res != NETRES_SUCCESS)
+        exit(EXIT_FAILURE);
+    printf("press enter to continue..."); getchar();
 }
 void main_client(const char *ipv4addr, short port)
 {
     struct network_connection *conn;
+    int temp;
 
-    /* conn = network_connection_create(ipv4addr, port); */
+    printf("Client Test: connecting to %s on :%d\n", ipv4addr, port);
+    conn = network_connection_create(ipv4addr, port, -1);
+    if (!conn)
+        return;
 
     while (1) {
-        getchar();
-    };
+        printf("[1] to send, [2] to recv: ");
+        scanf("%d", &temp); getchar();
+        if (temp == 1)
+            sendstuff(conn);
+        else
+            recvstuff(conn);
+    }
+
     network_connection_destroy(conn);
 }
 
 int main(int argc, char *argv[])
 {
-    printf("Hello CUNO\n");
+    printf("CUNO\n");
 
-    if (argc == 2)
-        main_client(argv[0], atoi(argv[1]));
-    else if (argc == 1)
-        main_server(argv[0]);
+    if (argc == 3)
+        main_client(argv[1], atoi(argv[2]));
+    else if (argc == 2)
+        main_server(argv[1]);
     else
         return 1;
 

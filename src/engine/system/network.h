@@ -40,19 +40,32 @@ struct network_message {
 };
 struct network_sendbuff {
     size_t head;
-    union {
-        struct network_message *m;
-        uint8_t *bytes;
-    } message;
+    struct network_message *message;
 };
 struct network_recvbuff {
     size_t capacity;
     size_t head;
-    union {
-        struct network_message *m;
-        uint8_t *bytes;
-    } message;
+    struct network_message *message;
 };
+
+static inline const char *str_network_result(enum network_result res)
+{
+    switch(res) {
+        case NETRES_SUCCESS:
+            return "Success";
+        case NETRES_ERR_CONN:
+            return "Connection Error";
+        case NETRES_ERR_REFUSED:
+            return "Connection Refused";
+        case NETRES_ERR_TIMEDOUT:
+            return "Connection Timed Out";
+        case NETRES_ERR_AGAIN:
+            return "NETRES_ERR_AGAIN";
+        default:
+            return "Unkonwn network result";
+    }
+}
+
 
 size_t network_serialize_u16(uint8_t dst[], uint16_t src);
 size_t network_serialize_u32(uint8_t dst[], uint32_t src);
