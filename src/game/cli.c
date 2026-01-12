@@ -5,7 +5,6 @@
 
 #ifndef __STDC_IEC_559__
 #include <float.h>
-
 STATIC_ASSERT(
     FLT_RADIX == 2
     && FLT_MANT_DIG == 24
@@ -15,7 +14,6 @@ STATIC_ASSERT(
     float_not_ieee754
 );
 #endif
-
 
 /* TODO: Factor out game_state and logic.h stuff from gui.c */
 static struct game_state *game_state;
