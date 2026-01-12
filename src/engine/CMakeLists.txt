@@ -13,10 +13,8 @@ target_link_libraries(engine INTERFACE
 if (ANDROID)
     message(STATUS "Android Engine")
     target_sources(engine_static PRIVATE
-        ${SRC_DIR}/engine/entry/main_andr.c
-        ${SRC_DIR}/engine/system/log/log_andr.c
-        ${SRC_DIR}/engine/system/graphic/egl.c
         ${SRC_DIR}/engine/system/time/time_posix.c
+        ${SRC_DIR}/engine/system/network/network_posix.c
     )
     target_link_libraries(engine_static PRIVATE
         android 
@@ -24,9 +22,17 @@ if (ANDROID)
     )
     if(NO_GUI)
         message(STATUS "No GUI")
-        target_sources(engine_static PRIVATE ${SRC_DIR}/engine/system/asset/asset_stdio.c)
+        target_sources(engine_static PRIVATE 
+            ${SRC_DIR}/engine/system/log/log_stdio.c
+            ${SRC_DIR}/engine/system/asset/asset_stdio.c
+        )
     else()
-        target_sources(engine_static PRIVATE ${SRC_DIR}/engine/system/asset/asset_andr.c)
+        target_sources(engine_static PRIVATE 
+            ${SRC_DIR}/engine/entry/main_andr.c
+            ${SRC_DIR}/engine/system/log/log_andr.c
+            ${SRC_DIR}/engine/system/graphic/egl.c
+            ${SRC_DIR}/engine/system/asset/asset_andr.c
+        )
 
         set(GLUE_DIR "${ANDROID_NDK}/sources/android/native_app_glue")
         target_include_directories(engine_static PRIVATE ${GLUE_DIR})
