@@ -18,12 +18,6 @@ STATIC_ASSERT(
 /* TODO: Factor out game_state and logic.h stuff from gui.c */
 static struct game_state *game_state;
 
-void main_server(const char *ipv4addr)
-{
-    struct network_listener *listener;
-    printf("Starting server");
-}
-
 void sendstuff(struct network_connection *conn)
 {
     int                         len;
@@ -68,17 +62,11 @@ void recvstuff(struct network_connection *conn)
         exit(EXIT_FAILURE);
     printf("press enter to continue..."); getchar();
 }
-void main_client(const char *ipv4addr, short port)
+void client_repl(struct network_connection *conn)
 {
-    struct network_connection *conn;
     int temp;
-
-    printf("Client Test: connecting to %s on :%d\n", ipv4addr, port);
-    conn = network_connection_create(ipv4addr, port, -1);
-    if (!conn)
-        return;
-
     while (1) {
+        printf("=> Client REPL\n");
         printf("[1] to send, [2] to recv: ");
         scanf("%d", &temp); getchar();
         if (temp == 1)
@@ -86,8 +74,37 @@ void main_client(const char *ipv4addr, short port)
         else
             recvstuff(conn);
     }
+}
+void main_client(const char *ipv4addr, short port)
+{
+    struct network_connection *conn;
+
+    printf("Client Test: connecting to %s on :%d\n", ipv4addr, port);
+    conn = network_connection_create(ipv4addr, port);
+    if (!conn)
+        return;
+
+    client_repl(conn);
 
     network_connection_destroy(conn);
+}
+
+void main_server(short port)
+{
+    struct network_listener *listener = network_listener_create(port, 3);
+    struct network_connection *conn;
+
+    printf("Server listening on port %d...\n", port);
+    while (1) {
+        if (network_listener_poll(listener) & NETWORK_POLLIN) {
+            printf("Incoming request...\n");
+            break;
+        }
+    }
+    conn = network_listener_accept(listener);
+    client_repl(conn);
+    
+    network_listener_destroy(listener);
 }
 
 int main(int argc, char *argv[])
@@ -97,7 +114,7 @@ int main(int argc, char *argv[])
     if (argc == 3)
         main_client(argv[1], atoi(argv[2]));
     else if (argc == 2)
-        main_server(argv[1]);
+        main_server(atoi(argv[1]));
     else
         return 1;
 

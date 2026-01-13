@@ -12,13 +12,10 @@
 #define bswap64(x) ((u64)htonl( (x) & 0xFFFFFFFF) << 32) | htonl( (x) >> 32);
 
 struct network_connection {
-    int     sockfd;
-    double  timeout_ms;
+    int sockfd;
 };
-
 struct network_listener {
     int sockfd;
-    enum network_result res;
 };
 
 static const u16 ENDIAN_TEST = 1;
@@ -83,7 +80,7 @@ size_t network_deserialize_u64(u64 *dst, const u8 src[])
     return sizeof(u64);
 }
 
-struct network_connection *network_connection_create(const char* ipv4addr, short port, double timeout_ms)
+struct network_connection *network_connection_create(const char* ipv4addr, short port)
 {
     struct network_connection *conn;
     int                 sockfd;
@@ -104,7 +101,6 @@ struct network_connection *network_connection_create(const char* ipv4addr, short
         goto err;
 
     memset(conn, 0, sizeof(struct network_connection));
-    conn->timeout_ms = timeout_ms;
     conn->sockfd = sockfd;
     cuno_logf(LOG_INFO, "Connected\n");
     return conn;
@@ -128,30 +124,15 @@ char network_connection_poll(struct network_connection *conn, char event)
     pollfd.events |= event & NETWORK_POLLIN ? POLLIN : 0;
     pollfd.events |= event & NETWORK_POLLOUT ? POLLOUT : 0;
 
-    poll(&pollfd, 1, conn->timeout_ms);
+    poll(&pollfd, 1, 0);
 
     return (pollfd.revents & POLLIN)  ? NETWORK_POLLIN  : 0 | 
            (pollfd.revents & POLLOUT) ? NETWORK_POLLOUT : 0;
 }
 
-void network_header_serialize(u8 *dst, const struct network_header *header)
-{
-    size_t bytes = 0;
-    bytes += network_serialize_u16(dst + bytes, header->version);
-    bytes += network_serialize_u16(dst + bytes, header->type);
-    bytes += network_serialize_u32(dst + bytes, header->len);
-}
-void network_header_deserialize(struct network_header *header, const u8 *src)
-{
-    size_t bytes = 0;
-    bytes += network_deserialize_u16(&header->version, src + bytes);
-    bytes += network_deserialize_u16(&header->type,    src + bytes);
-    bytes += network_deserialize_u32(&header->len,     src + bytes);
-}
-
 enum network_result network_connection_send(struct network_connection *conn, struct network_sendbuff *sendbuff)
 {
-    const size_t    TOTAL = sizeof(sendbuff->message->header) + sendbuff->message->header.len;
+    const size_t                TOTAL       = sizeof(sendbuff->message->header) + sendbuff->message->header.len;
     const struct network_header HEADER_COPY = sendbuff->message->header;
 
     network_header_serialize((u8 *)&sendbuff->message->header, &HEADER_COPY);
@@ -179,8 +160,6 @@ enum network_result network_connection_recv(struct network_connection *conn, str
     if (recvbuff->head >= sizeof(struct network_header))
         total += recvbuff->message->header.len;
 
-    printf("recv called when head is %lu\n", recvbuff->head);
-    
     res = recv(conn->sockfd, 
         (char *)recvbuff->message + recvbuff->head,
         total - recvbuff->head, 0);
@@ -204,7 +183,50 @@ enum network_result network_connection_recv(struct network_connection *conn, str
     return NETRES_SUCCESS;
 }
 
-struct network_listener *network_listener_create(short port);
-void network_listener_destroy(struct network_listener *listener);
-int network_listener_poll(struct network_listener *conn);
-struct network_connection *network_listener_accept(struct network_listener *listener);
+struct network_listener *network_listener_create(short port, int max_pending)
+{
+    int                     sockfd;
+    struct sockaddr_in      sockaddr;
+    struct network_listener *listener;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1)
+        return NULL;
+
+    sockaddr.sin_family      = AF_INET;
+    sockaddr.sin_port        = htons(port);
+    sockaddr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(sockfd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0)
+        goto err;
+
+    if (listen(sockfd, max_pending) < 0)
+        goto err;
+
+    listener = malloc(sizeof(struct network_listener));
+    listener->sockfd = sockfd;
+
+    return listener;
+err:
+    cuno_logf(LOG_ERR, "Connection Error: %s\n", strerror(errno));
+    close(sockfd);
+    return NULL;
+}
+void network_listener_destroy(struct network_listener *listener)
+{
+    close(listener->sockfd);
+    free(listener);
+}
+int network_listener_poll(struct network_listener *listener)
+{
+    return network_connection_poll((struct network_connection *)listener, NETWORK_POLLIN);
+}
+struct network_connection *network_listener_accept(struct network_listener *listener)
+{
+    struct network_connection *conn = malloc(sizeof(struct network_connection));
+    if (!conn)
+        return NULL;
+
+    conn->sockfd = accept(listener->sockfd, NULL, NULL);
+    return conn;
+}

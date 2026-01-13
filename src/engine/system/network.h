@@ -110,13 +110,28 @@ static inline uint64_t network_deserialize_auto(void *dst, uint8_t src[], uint64
     }
 }
 
-struct network_connection *network_connection_create(const char* ipv4addr, short port, double timeout_ms);
+static inline void network_header_serialize(uint8_t *dst, const struct network_header *header)
+{
+    size_t bytes = 0;
+    bytes += network_serialize_u16(dst + bytes, header->version);
+    bytes += network_serialize_u16(dst + bytes, header->type);
+    bytes += network_serialize_u32(dst + bytes, header->len);
+}
+static inline void network_header_deserialize(struct network_header *header, const uint8_t *src)
+{
+    size_t bytes = 0;
+    bytes += network_deserialize_u16(&header->version, src + bytes);
+    bytes += network_deserialize_u16(&header->type,    src + bytes);
+    bytes += network_deserialize_u32(&header->len,     src + bytes);
+}
+
+struct network_connection *network_connection_create(const char* ipv4addr, short port);
 void network_connection_destroy(struct network_connection *conn);
 char network_connection_poll(struct network_connection *conn, char flags);
 enum network_result network_connection_send(struct network_connection *conn, struct network_sendbuff *buff);
 enum network_result network_connection_recv(struct network_connection *conn, struct network_recvbuff *buff);
 
-struct network_listener *network_listener_create(short port);
+struct network_listener *network_listener_create(short port, int max_pending);
 void network_listener_destroy(struct network_listener *listener);
 int network_listener_poll(struct network_listener *conn);
 struct network_connection *network_listener_accept(struct network_listener *listener);
