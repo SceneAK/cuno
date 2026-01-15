@@ -1,14 +1,12 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
+#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <limits.h>
 #include "engine/utils.h"
-
-#define NETWORK_SERIALIZE_AUTO(dst, src) network_serialize_auto(dst, src, sizeof(*src))
-#define NETWORK_DESERIALIZE_AUTO(dst, src) network_deserialize_auto(dst, src, sizeof(*dst))
 
 #define NETWORK_POLLIN  1<<1
 #define NETWORK_POLLOUT 1<<2
@@ -38,13 +36,9 @@ struct network_message {
     struct network_header header;
     uint8_t data[];
 };
-struct network_sendbuff {
+struct network_messagebuff {
     size_t head;
-    struct network_message *message;
-};
-struct network_recvbuff {
     size_t capacity;
-    size_t head;
     struct network_message *message;
 };
 
@@ -66,70 +60,52 @@ static inline const char *str_network_result(enum network_result res)
     }
 }
 
-
-size_t network_serialize_u16(uint8_t dst[], uint16_t src);
-size_t network_serialize_u32(uint8_t dst[], uint32_t src);
-size_t network_serialize_u64(uint8_t dst[], uint64_t src);
-size_t network_deserialize_u16(uint16_t *dst, const uint8_t src[]);
-size_t network_deserialize_u32(uint32_t *dst, const uint8_t src[]);
-size_t network_deserialize_u64(uint64_t *dst, const uint8_t src[]);
-
-static inline size_t network_serialize_auto(uint8_t dst[], const void *src, uint64_t bytes)
-{
-    union {
-        uint16_t u16;
-        uint32_t u32;
-        uint64_t u64;
-    } tmp = { 0 };
-
-    switch(bytes*CHAR_BIT) {
-        case 16:
-            memcpy(&tmp.u16, src, bytes);
-            return network_serialize_u16(dst, tmp.u16);
-        case 32:
-            memcpy(&tmp.u32, src, bytes);
-            return network_serialize_u32(dst, tmp.u32);
-        case 64:
-            memcpy(&tmp.u64, src, bytes);
-            return network_serialize_u64(dst, tmp.u64);
-        default:
-            return 0;
-    }
+static inline void network_serialize_u8(uint8_t **cursor, const uint8_t src) 
+{ 
+    **cursor = src;
+    *cursor += sizeof(uint8_t);
 }
-static inline uint64_t network_deserialize_auto(void *dst, uint8_t src[], uint64_t bytes)
-{
-    switch(bytes*CHAR_BIT) {
-        case 16:
-            return network_deserialize_u16(dst, src);
-        case 32:
-            return network_deserialize_u32(dst, src);
-        case 64:
-            return network_deserialize_u64(dst, src);
-        default:
-            return 0;
-    }
+static inline uint8_t network_deserialize_u8(uint8_t **cursor) 
+{ 
+    *cursor += sizeof(uint8_t);
+    return *(*cursor - sizeof(uint8_t));
 }
 
-static inline void network_header_serialize(uint8_t *dst, const struct network_header *header)
-{
-    size_t bytes = 0;
-    bytes += network_serialize_u16(dst + bytes, header->version);
-    bytes += network_serialize_u16(dst + bytes, header->type);
-    bytes += network_serialize_u32(dst + bytes, header->len);
+static inline void network_serialize_str(uint8_t **cursor, const char* src) 
+{ 
+     *cursor += sprintf((char *)*cursor, "%s", src);
 }
-static inline void network_header_deserialize(struct network_header *header, const uint8_t *src)
+static inline void network_deserialize_str(const char* dst, uint8_t **cursor) 
+{ 
+     *cursor += sprintf((char *)dst, "%s", *cursor);
+}
+
+void network_serialize_u16(uint8_t **cursor, uint16_t src);
+void network_serialize_u32(uint8_t **cursor, uint32_t src);
+void network_serialize_u64(uint8_t **cursor, uint64_t src);
+uint16_t network_deserialize_u16(uint8_t **cursor);
+uint32_t network_deserialize_u32(uint8_t **cursor);
+uint64_t network_deserialize_u64(uint8_t **cursor);
+
+static inline void network_header_serialize(uint8_t **cursor, const struct network_header *header)
 {
-    size_t bytes = 0;
-    bytes += network_deserialize_u16(&header->version, src + bytes);
-    bytes += network_deserialize_u16(&header->type,    src + bytes);
-    bytes += network_deserialize_u32(&header->len,     src + bytes);
+    network_serialize_u16(cursor, header->version);
+    network_serialize_u16(cursor, header->type);
+    network_serialize_u32(cursor, header->len);
+}
+
+static inline void network_header_deserialize(struct network_header *header, uint8_t **cursor)
+{
+    header->version = network_deserialize_u16(cursor);
+    header->type = network_deserialize_u16(cursor);
+    header->len = network_deserialize_u32(cursor);
 }
 
 struct network_connection *network_connection_create(const char* ipv4addr, short port);
 void network_connection_destroy(struct network_connection *conn);
 char network_connection_poll(struct network_connection *conn, char flags);
-enum network_result network_connection_send(struct network_connection *conn, struct network_sendbuff *buff);
-enum network_result network_connection_recv(struct network_connection *conn, struct network_recvbuff *buff);
+enum network_result network_connection_send(struct network_connection *conn, struct network_messagebuff *buff);
+enum network_result network_connection_recv(struct network_connection *conn, struct network_messagebuff *buff);
 
 struct network_listener *network_listener_create(short port, int max_pending);
 void network_listener_destroy(struct network_listener *listener);

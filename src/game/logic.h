@@ -5,8 +5,10 @@
 #include "engine/array_list.h"
 
 #define is_pickable_color(color) ( 0 <= (color) && (color) <= 3 )
+#define PLAYER_NAME_MAX 64
 #define PLAYER_MAX 5
 #define PLAY_ARG_MAX 6
+#define CARD_HIDE(card) do { (card).type = CARD_UNKNOWN; (card).num = -1; (card).color = CARD_COLOR_MAX; } while()
 
 enum card_color {
     CARD_COLOR_BLACK = -1,
@@ -39,16 +41,16 @@ struct play_arg {
         int             player_idx;
     } u;
 };
-typedef unsigned short card_id_t;
+typedef int card_id_t;
 struct card {
     card_id_t           id;
     enum card_type      type;
     enum card_color     color;
-    unsigned short      num;
+    int                 num;
 };
 DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
 struct player {
-    char               *name;
+    char                name[PLAYER_NAME_MAX];
     struct card_list    hand;
 };
 enum act_type {
@@ -61,19 +63,20 @@ struct act_play {
     struct play_arg     args[PLAY_ARG_MAX];
 };
 struct game_state {
+    struct player       players[PLAYER_MAX];
+    unsigned int        player_len;
+
     card_id_t           card_id_last;
 
     int                 turn;
-    char                ended;
-    struct player       players[PLAYER_MAX];
-    int                 player_len;
-    int                 active_player_index;
+    int                 ended;
+    unsigned int        active_player_index;
     enum act_type       act;
 
     struct card         top_card;
-    int                 turn_dir;
-    int                 skip_pool;
-    int                 batsu_pool;
+    unsigned int        turn_dir;
+    unsigned int        skip_pool;
+    unsigned int        batsu_pool;
 };
 
 static const struct play_arg PLAY_ARG_ZERO = {0};

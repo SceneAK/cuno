@@ -8,9 +8,6 @@
 #include "engine/system/log.h"
 #include "engine/alias.h"
 
-#define IS_LITTLE_ENDIAN ( *((u8 *)&ENDIAN_TEST) == 1 )
-#define bswap64(x) ((u64)htonl( (x) & 0xFFFFFFFF) << 32) | htonl( (x) >> 32);
-
 struct network_connection {
     int sockfd;
 };
@@ -36,48 +33,34 @@ enum network_result netres_from_errno()
     }
 }
 
-size_t network_serialize_u16(u8 dst[], u16 src)
+void network_serialize_u16(u8 **cursor, u16 src)
 {
     src = htons(src);
-    memcpy(dst, &src, sizeof(u16));
-    return sizeof(u16);
+    memcpy(*cursor, &src, sizeof(u16));
+    *cursor += sizeof(u16);
 }
 
-size_t network_serialize_u32(u8 dst[], u32 src)
+void network_serialize_u32(u8 **cursor, u32 src)
 {
     src = htonl(src);
-    memcpy(dst, &src, sizeof(u32));
-    return sizeof(u32);
+    memcpy(*cursor, &src, sizeof(u32));
+    *cursor += sizeof(u32);
 }
 
-size_t network_serialize_u64(u8 dst[], u64 src)
+u16 network_deserialize_u16(u8 **cursor)
 {
-    if (IS_LITTLE_ENDIAN)
-        src = bswap64(src);
-    memcpy(dst, &src, sizeof(u64));
-    return sizeof(u64);
+    u16 temp;
+    memcpy(&temp, *cursor, sizeof(u16));
+    *cursor += sizeof(u16);
+    return ntohs(temp);
 }
 
-size_t network_deserialize_u16(u16 *dst, const u8 src[])
+u32 network_deserialize_u32(u8 **cursor)
 {
-    memcpy(dst, src, sizeof(u16));
-    *dst = ntohs(*dst);
-    return sizeof(u16);
-}
-
-size_t network_deserialize_u32(u32 *dst, const u8 src[])
-{
-    memcpy(dst, src, sizeof(u32));
-    *dst = ntohl(*dst);
-    return sizeof(u32);
-}
-
-size_t network_deserialize_u64(u64 *dst, const u8 src[])
-{
-    memcpy(dst, src, sizeof(u64));
-    if (IS_LITTLE_ENDIAN)
-        *dst = bswap64(*dst);
-    return sizeof(u64);
+    u32 temp;
+    memcpy(&temp, *cursor, sizeof(u32));
+    *cursor += sizeof(u32);
+    return ntohl(temp);
 }
 
 struct network_connection *network_connection_create(const char* ipv4addr, short port)
@@ -130,54 +113,58 @@ char network_connection_poll(struct network_connection *conn, char event)
            (pollfd.revents & POLLOUT) ? NETWORK_POLLOUT : 0;
 }
 
-enum network_result network_connection_send(struct network_connection *conn, struct network_sendbuff *sendbuff)
+enum network_result network_connection_send(struct network_connection *conn, struct network_messagebuff *msgbuff)
 {
-    const size_t                TOTAL       = sizeof(sendbuff->message->header) + sendbuff->message->header.len;
-    const struct network_header HEADER_COPY = sendbuff->message->header;
+    const size_t                 TOTAL       = sizeof(msgbuff->message->header) + msgbuff->message->header.len;
+    const struct network_header  HEADER_COPY = msgbuff->message->header;
+    u8                          *cursor;
 
-    network_header_serialize((u8 *)&sendbuff->message->header, &HEADER_COPY);
+    cursor = (u8 *)&msgbuff->message->header;
+    network_header_serialize(&cursor, &HEADER_COPY);
     ssize_t res = send(conn->sockfd,
-            (char *)sendbuff->message + sendbuff->head,
-            TOTAL - sendbuff->head, 0);
-    sendbuff->message->header = HEADER_COPY;
+            (char *)msgbuff->message + msgbuff->head,
+            TOTAL - msgbuff->head, 0);
+    msgbuff->message->header = HEADER_COPY;
 
     if (res < 0)
         return netres_from_errno();
 
-    sendbuff->head += res;
-    if (sendbuff->head != TOTAL)
+    msgbuff->head += res;
+    if (msgbuff->head != TOTAL)
         return NETRES_PARTIAL;
 
     return NETRES_SUCCESS;
 }
 
-enum network_result network_connection_recv(struct network_connection *conn, struct network_recvbuff *recvbuff)
+enum network_result network_connection_recv(struct network_connection *conn, struct network_messagebuff *msgbuff)
 {
-    size_t total = sizeof(struct network_header);
     struct network_header header_temp;
-    ssize_t res;
+    size_t   total = sizeof(struct network_header);
+    ssize_t  res;
+    u8      *cursor;
 
-    if (recvbuff->head >= sizeof(struct network_header))
-        total += recvbuff->message->header.len;
+    if (msgbuff->head >= sizeof(struct network_header))
+        total += msgbuff->message->header.len;
 
     res = recv(conn->sockfd, 
-        (char *)recvbuff->message + recvbuff->head,
-        total - recvbuff->head, 0);
+        (char *)msgbuff->message + msgbuff->head,
+        total - msgbuff->head, 0);
 
     if (res < 0)
         return netres_from_errno();
     if (res == 0)
         return NETRES_ERR_CONN;
 
-    recvbuff->head += res;
+    msgbuff->head += res;
 
-    if (recvbuff->head == sizeof(struct network_header)) {
-        network_header_deserialize(&header_temp, (u8 *)&recvbuff->message->header);
-        recvbuff->message->header = header_temp;
+    if (msgbuff->head == sizeof(struct network_header)) {
+        cursor = (u8 *)&msgbuff->message->header;
+        network_header_deserialize(&header_temp, &cursor);
+        msgbuff->message->header = header_temp;
         return NETRES_PARTIAL;
     }
 
-    if (recvbuff->head != total)
+    if (msgbuff->head != total)
         return NETRES_PARTIAL;
 
     return NETRES_SUCCESS;
