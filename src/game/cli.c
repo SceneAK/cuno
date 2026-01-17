@@ -1,7 +1,8 @@
 #include <stdio.h>
-#include "logic.h"
 #include "engine/system/network.h"
 #include "engine/utils.h"
+#include "serialize.h"
+#include "logic.h"
 
 #ifndef __STDC_IEC_559__
 #include <float.h>
@@ -10,111 +11,163 @@ STATIC_ASSERT(
     && FLT_MANT_DIG == 24
     && FLT_MAX_EXP == 128
     && sizeof(float)*CHAR_BIT == 32,
-
     float_not_ieee754
 );
 #endif
 
-/* TODO: Factor out game_state and logic.h stuff from gui.c */
-static struct game_state *game_state;
+#define PRINTF_RESET() printf("\x1b[2J\x1bH")
 
-void sendstuff(struct network_connection *conn)
+static char global_char_buff[2048];
+
+/********* SERVER **********/
+static struct game_state             server_state;
+static struct network_connection    *server_playerconn[1];
+
+void server_send_state()
 {
-    int                         len;
-    enum network_result         res;
-    union {
-        unsigned char           buffer[sizeof(struct network_header) + 1024];
-        struct network_message  m;
-    }                           message;
-    struct network_sendbuff     sendbuff = { .head = 0, .message = &message.m };
+    VLS_UNION(struct network_message, 512) server_msg = { 0 };
+    struct network_messagebuff buff = { 0, .message = &server_msg.v };
+    uint8_t *cursor;
+    int i;
 
-    printf("Type something: ");
-    scanf("%s", message.m.data);
+    cursor = server_msg.v.data;
+    game_state_serialize(&cursor, &server_state);
 
-    len = strlen((char *)message.m.data);
-    printf("message length: %d\n", len);
+    server_msg.v.header.len = cursor - server_msg.v.data;
 
-    message.m.header.version = 0;
-    message.m.header.type = 0;
-    message.m.header.len = len+1;
-    printf("sending");
-    res = network_connection_send(conn, &sendbuff);
-    printf("result: %s\n", str_network_result(res));
-    if (res != NETRES_SUCCESS)
-        exit(EXIT_FAILURE);
+    cursor = server_msg.v.data;
+    game_state_deserialize(&server_state, &cursor);
+
+    while (network_connection_send(server_playerconn[0], &buff) == NETRES_PARTIAL);
 }
-void recvstuff(struct network_connection *conn)
-{
-    enum network_result         res;
-    union {
-        unsigned char           buffer[sizeof(struct network_header) + 1024];
-        struct network_message  m;
-    }                           message;
-    struct network_recvbuff     recvbuff = { .head = 0, .capacity = sizeof(message), .message = &message.m };
 
-    do
-        res = network_connection_recv(conn, &recvbuff);
-    while (res == NETRES_PARTIAL);
-    printf("hdr: len %d\n", message.m.header.len);
-    printf("msg: %s\n", (char *)message.m.data);
-    printf("res: %s\n", str_network_result(res));
-    if (res != NETRES_SUCCESS)
-        exit(EXIT_FAILURE);
-    printf("press enter to continue..."); getchar();
-}
-void client_repl(struct network_connection *conn)
+void server_move(const char *input)
 {
-    int temp;
-    while (1) {
-        printf("=> Client REPL\n");
-        printf("[1] to send, [2] to recv: ");
-        scanf("%d", &temp); getchar();
-        if (temp == 1)
-            sendstuff(conn);
-        else
-            recvstuff(conn);
+    struct act_play play = { 0 };
+
+    if (input[0] == 'p') {
+        play.card_id = atoi(input + 1);
+        game_state_act_play(&server_state, play);
+    } else {
+        game_state_act_draw(&server_state);
     }
+    game_state_end_turn(&server_state);
+    server_send_state();
 }
+
+void server_start(struct network_listener *listener)
+{
+    game_state_init(&server_state, 2, 5); 
+
+    server_playerconn[0] = network_listener_accept(listener); /* Player 1 */
+    printf("Accepted.\n");
+    server_send_state();
+}
+
+void server_update()
+{
+    VLS_UNION(struct network_message, 256) server_msg = { 0 };
+    struct network_messagebuff buff = { 0, .message = &server_msg.v };
+
+    if (server_state.active_player_index == 0)
+        return;
+
+    while (network_connection_recv(server_playerconn[0], &buff) == NETRES_PARTIAL);
+    server_move((char *)server_msg.v.data);
+}
+
+/********* CLIENT **********/
+static struct game_state     client_state = {0};
+static int                   client_player;
+struct network_connection   *client_serverconn = NULL;
+
+void client_start(struct network_connection *conn)
+{
+    client_serverconn = conn;
+}
+
+void client_update()
+{
+    VLS_UNION(struct network_message, 512)   msg;
+    struct network_messagebuff               buff = {0, .message = &msg.v};
+    unsigned char                           *cursor;
+    int                                      playerno = client_serverconn ? 1 : 0;
+    int i, temp;
+
+    if (client_serverconn) {
+        while (network_connection_recv(client_serverconn, &buff) == NETRES_PARTIAL);
+        cursor = msg.v.data;
+        game_state_deserialize(&client_state, &cursor);
+    } else
+        client_state = server_state;
+
+    log_game_state(global_char_buff, sizeof(global_char_buff), &client_state);
+    printf("%s\n", global_char_buff);
+
+    if (client_state.active_player_index != playerno)
+        return;
+
+    printf("===============================================\n"
+           "draw: d<enter>, play: p[card_id]<enter>\n"
+           ">> ");
+    scanf(" %c", msg.v.data);
+    msg.v.header.len = 1;
+    if (msg.v.data[0] == 'p') {
+        scanf(" %d", &temp);
+        msg.v.header.len += sprintf((char *)(msg.v.data+1), "%d", temp);
+    }
+
+    buff.head = 0;
+    if (client_serverconn)
+        while (network_connection_send(client_serverconn, &buff) == NETRES_PARTIAL);
+    else
+        server_move((char *)msg.v.data);
+}
+
 void main_client(const char *ipv4addr, short port)
 {
     struct network_connection *conn;
 
-    printf("Client Test: connecting to %s on :%d\n", ipv4addr, port);
+    printf("Connecting to %s on :%d\n", ipv4addr, port);
     conn = network_connection_create(ipv4addr, port);
     if (!conn)
         return;
 
-    client_repl(conn);
+    client_start(conn);
+    while (1) {
+        client_update();
+        PRINTF_RESET();
+    }
 
     network_connection_destroy(conn);
 }
 
-void main_server(short port)
+void main_host(short port)
 {
     struct network_listener *listener = network_listener_create(port, 3);
-    struct network_connection *conn;
 
     printf("Server listening on port %d...\n", port);
+    server_start(listener);
+
+    client_start(NULL);
     while (1) {
-        if (network_listener_poll(listener) & NETWORK_POLLIN) {
-            printf("Incoming request...\n");
-            break;
-        }
+        client_update();
+        server_update();
+        PRINTF_RESET();
     }
-    conn = network_listener_accept(listener);
-    client_repl(conn);
-    
+
     network_listener_destroy(listener);
 }
 
 int main(int argc, char *argv[])
 {
-    printf("CUNO\n");
+    PRINTF_RESET();
+    printf("CUNO Start.\n");
 
     if (argc == 3)
         main_client(argv[1], atoi(argv[2]));
     else if (argc == 2)
-        main_server(atoi(argv[1]));
+        main_host(atoi(argv[1]));
     else
         return 1;
 

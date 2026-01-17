@@ -343,6 +343,8 @@ int game_state_act_auto(struct game_state *game)
 const char *card_type_to_str(enum card_type card_type)
 {
     switch (card_type) {
+        case CARD_UNKNOWN:
+            return "unknown";
         case CARD_NUMBER:
             return "number";
         case CARD_REVERSE:
@@ -358,7 +360,7 @@ const char *card_type_to_str(enum card_type card_type)
         case CARD_SWAP:
             return "swap";
         default:
-            return "Undefined card_type";
+            return "undefined";
     }
 }
 const char *card_color_to_str(enum card_color color)
@@ -375,7 +377,7 @@ const char *card_color_to_str(enum card_color color)
         case CARD_COLOR_BLACK:
             return "black";
         default:
-            return "Undefined card_color";
+            return "undefined";
     }
 }
 

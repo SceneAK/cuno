@@ -41,12 +41,12 @@ struct play_arg {
         int             player_idx;
     } u;
 };
-typedef int card_id_t;
+typedef unsigned short card_id_t;
 struct card {
     card_id_t           id;
     enum card_type      type;
     enum card_color     color;
-    int                 num;
+    unsigned short      num;
 };
 DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
 struct player {
@@ -74,7 +74,7 @@ struct game_state {
     enum act_type       act;
 
     struct card         top_card;
-    unsigned int        turn_dir;
+    int                 turn_dir;
     unsigned int        skip_pool;
     unsigned int        batsu_pool;
 };
