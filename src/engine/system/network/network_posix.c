@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
+#include "engine/system/network_packer.h"
 #include "engine/system/network.h"
 #include "engine/system/log.h"
 #include "engine/alias.h"
@@ -14,8 +15,6 @@ struct network_connection {
 struct network_listener {
     int sockfd;
 };
-
-static const u16 ENDIAN_TEST = 1;
 
 enum network_result netres_from_errno() 
 {
@@ -33,35 +32,13 @@ enum network_result netres_from_errno()
     }
 }
 
-void network_serialize_u16(u8 **cursor, u16 src)
-{
-    src = htons(src);
-    memcpy(*cursor, &src, sizeof(u16));
-    *cursor += sizeof(u16);
-}
+u16 network_u16_to_host(u16 net) { return ntohs(net); }
 
-void network_serialize_u32(u8 **cursor, u32 src)
-{
-    src = htonl(src);
-    memcpy(*cursor, &src, sizeof(u32));
-    *cursor += sizeof(u32);
-}
+u32 network_u32_to_host(u32 net) { return ntohl(net); }
 
-u16 network_deserialize_u16(u8 **cursor)
-{
-    u16 temp;
-    memcpy(&temp, *cursor, sizeof(u16));
-    *cursor += sizeof(u16);
-    return ntohs(temp);
-}
+u16 network_u16_to_net(u16 host) { return htons(host); }
 
-u32 network_deserialize_u32(u8 **cursor)
-{
-    u32 temp;
-    memcpy(&temp, *cursor, sizeof(u32));
-    *cursor += sizeof(u32);
-    return ntohl(temp);
-}
+u32 network_u32_to_net(u32 host) { return htonl(host); }
 
 struct network_connection *network_connection_create(const char* ipv4addr, short port)
 {
@@ -113,60 +90,31 @@ char network_connection_poll(struct network_connection *conn, char event)
            (pollfd.revents & POLLOUT) ? NETWORK_POLLOUT : 0;
 }
 
-enum network_result network_connection_send(struct network_connection *conn, struct network_messagebuff *msgbuff)
+enum network_result network_connection_send(struct network_connection *conn, uint8_t **readcursor, const uint8_t *end)
 {
-    const size_t                 TOTAL       = sizeof(msgbuff->message->header) + msgbuff->message->header.len;
-    const struct network_header  HEADER_COPY = msgbuff->message->header;
-    u8                          *cursor;
+    ssize_t res;
 
-    cursor = (u8 *)&msgbuff->message->header;
-    network_header_serialize(&cursor, &HEADER_COPY);
-    ssize_t res = send(conn->sockfd,
-            (char *)msgbuff->message + msgbuff->head,
-            TOTAL - msgbuff->head, 0);
-    msgbuff->message->header = HEADER_COPY;
-
+    res = send(conn->sockfd, *readcursor, end - *readcursor, 0);
     if (res < 0)
         return netres_from_errno();
 
-    msgbuff->head += res;
-    if (msgbuff->head != TOTAL)
+    *readcursor += res;
+    if (*readcursor != end)
         return NETRES_PARTIAL;
-
     return NETRES_SUCCESS;
 }
 
-enum network_result network_connection_recv(struct network_connection *conn, struct network_messagebuff *msgbuff)
+enum network_result network_connection_recv(struct network_connection *conn, uint8_t **writecursor, const uint8_t *end)
 {
-    struct network_header header_temp;
-    size_t   total = sizeof(struct network_header);
-    ssize_t  res;
-    u8      *cursor;
+    ssize_t res;
 
-    if (msgbuff->head >= sizeof(struct network_header))
-        total += msgbuff->message->header.len;
-
-    res = recv(conn->sockfd, 
-        (char *)msgbuff->message + msgbuff->head,
-        total - msgbuff->head, 0);
-
+    res = recv(conn->sockfd, *writecursor, end - *writecursor, 0);
     if (res < 0)
         return netres_from_errno();
     if (res == 0)
         return NETRES_ERR_CONN;
 
-    msgbuff->head += res;
-
-    if (msgbuff->head == sizeof(struct network_header)) {
-        cursor = (u8 *)&msgbuff->message->header;
-        network_header_deserialize(&header_temp, &cursor);
-        msgbuff->message->header = header_temp;
-        return NETRES_PARTIAL;
-    }
-
-    if (msgbuff->head != total)
-        return NETRES_PARTIAL;
-
+    *writecursor += res;
     return NETRES_SUCCESS;
 }
 
@@ -216,4 +164,32 @@ struct network_connection *network_listener_accept(struct network_listener *list
 
     conn->sockfd = accept(listener->sockfd, NULL, NULL);
     return conn;
+}
+
+void network_buffer_init(struct network_buffer *buff, size_t capacity)
+{
+    buff->start = malloc(capacity);
+    buff->head  = buff->start;
+    buff->tail  = buff->start;
+    buff->end   = buff->start + capacity;
+}
+
+void network_buffer_deinit(struct network_buffer *buff)
+{
+    free(buff->start);
+}
+
+int network_buffer_make_space(struct network_buffer *buff, size_t space)
+{
+    const size_t LEN = NETWORK_BUFFER_LEN(*buff);
+
+    if (buff->tail + space < buff->end)
+        return 0;
+    if (LEN + space > NETWORK_BUFFER_CAPACITY(*buff))
+        return -1;
+
+    memmove(buff->start, buff->head, LEN);
+    buff->tail = buff->start + LEN;
+    buff->head = buff->start;
+    return 0;
 }
