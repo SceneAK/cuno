@@ -1,47 +1,75 @@
 #include <stdio.h>
+#include <unistd.h>
 #include "engine/system/network.h"
 #include "engine/utils.h"
 #include "serialize.h"
 #include "logic.h"
 
-#ifndef __STDC_IEC_559__
-#include <float.h>
-STATIC_ASSERT(
-    FLT_RADIX == 2
-    && FLT_MANT_DIG == 24
-    && FLT_MAX_EXP == 128
-    && sizeof(float)*CHAR_BIT == 32,
-    float_not_ieee754
-);
-#endif
+#define PRINTF_RESET() printf("\x1b[2J\x1b[H")
+#define NETMSG_VER 0
+#define DEFAULT_RECV_SIZE 400
 
-#define PRINTF_RESET() printf("\x1b[2J\x1bH")
+enum netmessage_type {
+    NETMSG_UNKNOWN = -1,
+    NETMSG_GMSTATE,
+    NETMSG_ACT,
+};
 
-static char global_char_buff[2048];
+static char  global_char_buff[2048];
+static const char  *SPINNER[] = {"⌜", "⌝", "⌟", "⌞"};
+
+void print_spinner()
+{
+    static int spinner_idx = 0;
+    printf("%s\x1b[1D", SPINNER[spinner_idx]);
+    fflush(stdout);
+    spinner_idx = (spinner_idx + 1) % ARRAY_SIZE(SPINNER);
+}
+
+void netupdate_sendrecv(struct network_connection *conn, struct network_buffer *sendbuff, struct network_buffer *recvbuff)
+{
+    char status;
+
+    if (!conn)
+        return;
+
+    status = network_connection_poll(conn, NETWORK_POLLIN | NETWORK_POLLOUT);
+
+    if ((status & NETWORK_POLLOUT) && NETWORK_BUFFER_LEN(*sendbuff))
+        network_connection_send(conn, &sendbuff->head, sendbuff->tail);
+
+    if (status & NETWORK_POLLIN) {
+        network_buffer_make_space(recvbuff, DEFAULT_RECV_SIZE);
+        network_connection_recv(conn, &recvbuff->tail, recvbuff->end);
+    }
+}
 
 /********* SERVER **********/
 static struct game_state             server_state;
 static struct network_connection    *server_playerconn[1];
+struct network_buffer                server_sendbuff, server_recvbuff;
 
 void server_send_state()
 {
-    VLS_UNION(struct network_message, 512) server_msg = { 0 };
-    struct network_messagebuff buff = { 0, .message = &server_msg.v };
-    uint8_t *cursor;
-    int i;
+    struct network_header header = {
+        .version = NETMSG_VER,
+        .type = NETMSG_GMSTATE,
+        .len = 0,
+    };
+    size_t total = 0;
 
-    cursor = server_msg.v.data;
-    game_state_serialize(&cursor, &server_state);
+    game_state_serialize(NULL, &server_state, &total);
+    header.len = total;
 
-    server_msg.v.header.len = cursor - server_msg.v.data;
+    network_buffer_make_space(&server_sendbuff, header.len + NETHDR_SERIALIZED_SIZE);
+    network_header_serialize(&server_sendbuff.tail, &header);
+    game_state_serialize(&server_sendbuff.tail, &server_state, NULL);
 
-    cursor = server_msg.v.data;
-    game_state_deserialize(&server_state, &cursor);
-
-    while (network_connection_send(server_playerconn[0], &buff) == NETRES_PARTIAL);
+extern char client_youvegotmail;
+    client_youvegotmail = 1;
 }
 
-void server_move(const char *input)
+void server_process_act(const char *input)
 {
     struct act_play play = { 0 };
 
@@ -55,73 +83,147 @@ void server_move(const char *input)
     server_send_state();
 }
 
+void server_try_pop_recvbuff()
+{
+    static struct network_header header = { .type = NETMSG_UNKNOWN };
+    static char input[16];
+
+    switch (header.type) {
+        case (uint16_t)NETMSG_UNKNOWN:
+            if (NETWORK_BUFFER_LEN(server_recvbuff) < NETHDR_SERIALIZED_SIZE) 
+                return;
+            network_header_deserialize(&header, &server_recvbuff.head);
+            return;
+        case NETMSG_ACT:
+            if (NETWORK_BUFFER_LEN(server_recvbuff) < header.len) 
+                return;
+            network_unpack_str(input, &server_recvbuff.head);
+            header.type = NETMSG_UNKNOWN;
+            server_process_act(input);
+            return;
+        default:
+            printf("Unhandled NETMSG type %d\n", header.type);
+            return;
+    }
+}
+
 void server_start(struct network_listener *listener)
 {
     game_state_init(&server_state, 2, 5); 
+    network_buffer_init(&server_sendbuff, 512);
+    network_buffer_init(&server_recvbuff, 128);
 
-    server_playerconn[0] = network_listener_accept(listener); /* Player 1 */
+    server_playerconn[0] = network_listener_accept(listener);
     printf("Accepted.\n");
     server_send_state();
 }
 
 void server_update()
 {
-    VLS_UNION(struct network_message, 256) server_msg = { 0 };
-    struct network_messagebuff buff = { 0, .message = &server_msg.v };
+    netupdate_sendrecv(server_playerconn[0], &server_sendbuff, &server_recvbuff);
 
-    if (server_state.active_player_index == 0)
-        return;
-
-    while (network_connection_recv(server_playerconn[0], &buff) == NETRES_PARTIAL);
-    server_move((char *)server_msg.v.data);
+    while (NETWORK_BUFFER_LEN(server_recvbuff))
+        server_try_pop_recvbuff();
 }
 
 /********* CLIENT **********/
 static struct game_state     client_state = {0};
+       char                  client_youvegotmail = 0;
 static int                   client_player;
 struct network_connection   *client_serverconn = NULL;
+struct network_buffer        client_sendbuff, client_recvbuff;
 
 void client_start(struct network_connection *conn)
 {
     client_serverconn = conn;
+    network_buffer_init(&client_sendbuff, 128);
+    network_buffer_init(&client_recvbuff, 1024);
 }
 
-void client_update()
+void client_try_pop_recvbuff()
 {
-    VLS_UNION(struct network_message, 512)   msg;
-    struct network_messagebuff               buff = {0, .message = &msg.v};
-    unsigned char                           *cursor;
-    int                                      playerno = client_serverconn ? 1 : 0;
-    int i, temp;
-
-    if (client_serverconn) {
-        while (network_connection_recv(client_serverconn, &buff) == NETRES_PARTIAL);
-        cursor = msg.v.data;
-        game_state_deserialize(&client_state, &cursor);
-    } else
+    static struct network_header header = { .type = NETMSG_UNKNOWN };
+    switch (header.type) {
+        case (uint16_t)NETMSG_UNKNOWN:
+            if (NETWORK_BUFFER_LEN(client_recvbuff) < NETHDR_SERIALIZED_SIZE) 
+                return;
+            network_header_deserialize(&header, &client_recvbuff.head);
+            return;
+        case NETMSG_GMSTATE:
+            if (NETWORK_BUFFER_LEN(client_recvbuff) < header.len) 
+                return;
+            game_state_deserialize(&client_state, &client_recvbuff.head);
+            header.type = NETMSG_UNKNOWN;
+            client_youvegotmail = 1;
+            return;
+        default:
+            printf("Unhandled NETMSG type %d\n", header.type);
+            return;
+    }
+}
+void client_update_state()
+{
+    if (!client_serverconn) {
         client_state = server_state;
-
-    log_game_state(global_char_buff, sizeof(global_char_buff), &client_state);
-    printf("%s\n", global_char_buff);
-
-    if (client_state.active_player_index != playerno)
         return;
+    }
+
+    while (NETWORK_BUFFER_LEN(client_recvbuff))
+        client_try_pop_recvbuff();
+}
+
+void client_act()
+{
+    struct network_header header = {
+        .version = NETMSG_VER,
+        .type = NETMSG_ACT,
+        .len = 0
+    };
+    char input[16];
+    int temp;
 
     printf("===============================================\n"
            "draw: d<enter>, play: p[card_id]<enter>\n"
            ">> ");
-    scanf(" %c", msg.v.data);
-    msg.v.header.len = 1;
-    if (msg.v.data[0] == 'p') {
+    scanf(" %c", input);
+
+    header.len = 1;
+    if (input[0] == 'p') {
         scanf(" %d", &temp);
-        msg.v.header.len += sprintf((char *)(msg.v.data+1), "%d", temp);
+        header.len += sprintf((char *)(input+1), "%d", temp);
     }
 
-    buff.head = 0;
-    if (client_serverconn)
-        while (network_connection_send(client_serverconn, &buff) == NETRES_PARTIAL);
-    else
-        server_move((char *)msg.v.data);
+    if (client_serverconn) {
+        network_buffer_make_space(&client_sendbuff, header.len + NETHDR_SERIALIZED_SIZE);
+        network_header_serialize(&client_sendbuff.tail, &header);
+        network_pack_str(&client_sendbuff.tail, input, NULL);
+    } else {
+        server_process_act(input);
+    }
+}
+
+void client_update()
+{
+    int playerno = client_serverconn ? 1 : 0;
+
+    netupdate_sendrecv(client_serverconn, &client_sendbuff, &client_recvbuff);
+
+    client_update_state(); 
+    if (client_youvegotmail) {
+        client_youvegotmail = 0;
+
+        PRINTF_RESET();
+        log_game_state(global_char_buff, sizeof(global_char_buff), &client_state);
+        printf("%s\n", global_char_buff);
+
+        if (client_state.active_player_index == playerno) {
+            client_act();
+            return;
+        }
+        printf("Waiting for update... ");
+    }
+
+    print_spinner(); usleep(200 * 1000);
 }
 
 void main_client(const char *ipv4addr, short port)
@@ -136,7 +238,6 @@ void main_client(const char *ipv4addr, short port)
     client_start(conn);
     while (1) {
         client_update();
-        PRINTF_RESET();
     }
 
     network_connection_destroy(conn);
@@ -146,14 +247,12 @@ void main_host(short port)
 {
     struct network_listener *listener = network_listener_create(port, 3);
 
-    printf("Server listening on port %d...\n", port);
-    server_start(listener);
-
+    server_start(listener); printf("Server listening on port %d...\n", port);
     client_start(NULL);
     while (1) {
-        client_update();
         server_update();
-        PRINTF_RESET();
+        if (!NETWORK_BUFFER_LEN(server_sendbuff))
+            client_update();
     }
 
     network_listener_destroy(listener);
