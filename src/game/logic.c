@@ -130,20 +130,26 @@ static int play_card_effect(struct game_state *game, struct card *card, const st
     return 0;
 }
 
-void game_state_init(struct game_state *game, int player_len, int deal)
+void game_state_init(struct game_state *game)
 {
-    int i;
-
     game->active_player_index   = 0;
     game->turn                  = 0;
-    game->player_len            = min(player_len, PLAYER_MAX);
     game->ended                 = 0;
     game->turn_dir              = 1;
     game->skip_pool             = 0;
     game->batsu_pool            = 0;
+    game->player_len            = 0;
     memset(game->players, 0, sizeof(game->players));
+}
+
+void game_state_start(struct game_state *game, int player_len, int deal)
+{
+    int i;
+
+    game->player_len = min(player_len, PLAYER_MAX);
 
     for (i = 0; i < game->player_len; i++) {
+        game->players[i].id = i;
         card_list_init(&game->players[i].hand, deal);
         append_player_rand_cards(game, i, deal);
     }
@@ -161,7 +167,7 @@ void game_state_deinit(struct game_state *game)
         card_list_deinit(&game->players[i].hand);
 }
 
-void game_state_copy(struct game_state *dst, const struct game_state *src)
+void game_state_copy_into(struct game_state *dst, const struct game_state *src)
 {
     struct game_state *old_dst = dst;
     struct game_state new_dst;
@@ -170,7 +176,7 @@ void game_state_copy(struct game_state *dst, const struct game_state *src)
     memcpy(&new_dst, src, sizeof(struct game_state));
 
     for (i = 0; i < old_dst->player_len && i < src->player_len; i++) {
-        card_list_copy(&old_dst->players[i].hand, &src->players[i].hand);
+        card_list_copy_into(&old_dst->players[i].hand, &src->players[i].hand);
         new_dst.players[i].hand = old_dst->players[i].hand;
     }
     for (; i < old_dst->player_len; i++)
@@ -182,6 +188,18 @@ void game_state_copy(struct game_state *dst, const struct game_state *src)
     memcpy(dst, &new_dst, sizeof(struct game_state));
 }
 
+void game_state_for_player(struct game_state *state, int player_id)
+{
+    int i, j;
+    for (i = 0; i < state->player_len; i++) {
+        if (state->players[i].id == player_id)
+            continue;
+
+        for (j = 0; j < state->players[i].hand.len; j++) {
+            CARD_HIDE(state->players[i].hand.elems[j]);
+        }
+    }
+}
 
 /* ACTS */
 int game_state_can_act_draw(const struct game_state *game)
@@ -381,27 +399,28 @@ const char *card_color_to_str(enum card_color color)
     }
 }
 
-size_t log_card(char *buffer, size_t buffer_len, const struct card *card)
+size_t log_card(char *buffer, size_t buffer_len, const struct card *card, char hide_unknowns)
 {
     const char *card_type = card_type_to_str(card->type);
     const char *card_color = card_color_to_str(card->color);
+    if (card->type == CARD_UNKNOWN && hide_unknowns)
+        return 0;
     if (card->type == CARD_NUMBER)
         return snprintf(buffer, buffer_len, "card(%d) [%s] (%s) (%i)\n", card->id, card_type, card_color, card->num);
-    else 
+    else
         return snprintf(buffer, buffer_len, "card(%d) [%s] (%s)\n",card->id, card_type, card_color);
 }
-size_t log_hand(char *buffer, size_t buffer_len, const struct player *player)
+size_t log_hand(char *buffer, size_t buffer_len, const struct player *player, char hide_unknowns)
 {
     int i;
     size_t total = 0;
     
     for (i = 0; i < player->hand.len; i++) {
-        total += log_card(buffer + total, buffer_len - total, player->hand.elems + i);
+        total += log_card(buffer + total, buffer_len - total, player->hand.elems + i, hide_unknowns);
     }
-    total += snprintf(buffer + total, buffer_len - total, "Total of %lu cards\n", player->hand.len);
     return total;
 }
-size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game)
+size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game, char hide_unknowns)
 {
     int i;
     size_t total;
@@ -423,10 +442,10 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
         game->skip_pool,
         game->batsu_pool,
         game->active_player_index);
-    total += log_card(buffer + total, buffer_len - total, &game->top_card);
+    total += log_card(buffer + total, buffer_len - total, &game->top_card, hide_unknowns);
     for (i = 0; i < game->player_len; i++) {
-        total += snprintf(buffer + total, buffer_len - total, "player [%i]:\n", i);
-        total += log_hand(buffer + total, buffer_len - total, game->players + i);
+        total += snprintf(buffer + total, buffer_len - total, "Player %i: (total %lu)\n", i, game->players[i].hand.len);
+        total += log_hand(buffer + total, buffer_len - total, game->players + i, hide_unknowns);
     }
     return total;
 }

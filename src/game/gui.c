@@ -45,7 +45,7 @@ static const struct transform           DRAW_PILE_TRANSFORM = {
     {0, 0, PI/32},
     {0.4, 0.4, 0.4}
 };
-const float                             CARD_RAISE_DIST = 5.0f;
+static const float                      CARD_RAISE_DIST = 5.0f;
 static const float                      LINE_HEIGHT = -30.0f;
 
 /******* RESOURCES *******/
@@ -612,7 +612,7 @@ static void staged_plays_try_play(entity_t entity_card)
     global_ui_state = UI_STATE_MAKE_ACT;
  
     if (!staged_plays.len)
-        game_state_copy(&game_state_alt, game_state);
+        game_state_copy_into(&game_state_alt, game_state);
 
     if (!game_state_can_act_play(&game_state_alt, curr_play))
         return;
@@ -627,7 +627,7 @@ static void staged_plays_try_unplay(entity_t entity_card)
     struct transform    target;
     size_t              i, card_index;
 
-    game_state_copy(&game_state_alt, game_state);
+    game_state_copy_into(&game_state_alt, game_state);
     for (i = 0; i < staged_plays.len; i++) {
         if (staged_plays.elems[i].card_id == card_ids[entity_card]) {
             card_index = i;
@@ -643,7 +643,7 @@ static void staged_plays_try_unplay(entity_t entity_card)
         return;
     }
 
-    game_state_copy(&game_state_alt, game_state);
+    game_state_copy_into(&game_state_alt, game_state);
     for (i = 0; i < staged_plays.len; i++)
         game_state_act_play(&game_state_alt, staged_plays.elems[i]);
 }
@@ -674,7 +674,7 @@ static void end_turn()
     scene_mirror_turn();
     game_state_end_turn(&game_state_mut);
     
-    log_game_state(game_log_buff, sizeof(game_log_buff), game_state);
+    log_game_state(game_log_buff, sizeof(game_log_buff), game_state, 0);
     change_debug_text(game_log_buff);
     cuno_logf(LOG_INFO, game_log_buff);
 }
@@ -745,7 +745,7 @@ static void on_state_make_act()
 
     top_card = entity_discards.elems[entity_discards.len-1];
     if (comp_system_hitrect_check_and_clear_state(sys_hitrect, top_card) && staged_plays.len > 0) {
-        game_state_copy(&game_state_mut, &game_state_alt);
+        game_state_copy_into(&game_state_mut, &game_state_alt);
         end_turn();
         return;
     }
@@ -812,12 +812,13 @@ int game_init(struct graphic_session *created_session)
     if (!resources_init(created_session))
         return -1;
 
-    game_state_init(&game_state_mut, PLAYER_AMOUNT, DEAL_PER_PLAYER);
+    game_state_init(&game_state_mut);
+    game_state_start(&game_state_mut, PLAYER_AMOUNT, DEAL_PER_PLAYER);
 
     comp_systems_init();
     entities_init();
 
-    log_game_state(game_log_buff, sizeof(game_log_buff), game_state);
+    log_game_state(game_log_buff, sizeof(game_log_buff), game_state, 0);
     change_debug_text(game_log_buff);
     return 0;
 }

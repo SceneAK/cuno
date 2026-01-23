@@ -51,7 +51,7 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     { \
         list->len = 0; \
     } \
-    static_inline void name##_copy(struct name *dst, const struct name *src) \
+    static_inline void name##_copy_into(struct name *dst, const struct name *src) \
     { \
         name##_clear(dst); \
         name##_emplace(dst, src->len); \
@@ -61,7 +61,7 @@ void array_list_remove_swp(struct array_list *list, const size_t *indices, size_
     { \
         struct name cpy; \
         name##_init(&cpy, src->allocated_len); \
-        name##_copy(&cpy, src); \
+        name##_copy_into(&cpy, src); \
         return cpy; \
     }
 

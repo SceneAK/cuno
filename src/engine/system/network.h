@@ -54,15 +54,17 @@ char network_connection_poll(struct network_connection *conn, char flags);
 enum network_result network_connection_send(struct network_connection *conn, uint8_t **readcursor, const uint8_t *end);
 enum network_result network_connection_recv(struct network_connection *conn, uint8_t **writecursor, const uint8_t *end);
 
+void network_connection_sendrecv_nb(struct network_connection *conn, struct network_buffer *sendbuff, struct network_buffer *recvbuff);
+
 struct network_listener *network_listener_create(short port, int max_pending);
 void network_listener_destroy(struct network_listener *listener);
-int network_listener_poll(struct network_listener *conn);
+int network_listener_poll(struct network_listener *listener);
 struct network_connection *network_listener_accept(struct network_listener *listener);
 
 void network_buffer_init(struct network_buffer *buff, size_t capacity);
 void network_buffer_deinit(struct network_buffer *buff);
 int network_buffer_make_space(struct network_buffer *buff, size_t space);
-
+int network_buffer_peek_hdrmsg(const struct network_buffer *buff);
 
 static inline const char *str_network_result(enum network_result res)
 {
@@ -78,9 +80,9 @@ static inline const char *str_network_result(enum network_result res)
 
 static inline void network_header_serialize(uint8_t **cursor, const struct network_header *header)
 {
-    network_pack_u16(cursor, header->version, NULL);
-    network_pack_u16(cursor, header->type,    NULL);
-    network_pack_u32(cursor, header->len,     NULL);
+    network_pack_u16(cursor, header->version);
+    network_pack_u16(cursor, header->type);
+    network_pack_u32(cursor, header->len);
 }
 
 static inline void network_header_deserialize(struct network_header *header, uint8_t **cursor)

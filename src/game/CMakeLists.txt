@@ -8,8 +8,14 @@ target_sources(game INTERFACE
     ${SRC_DIR}/logic.c
 )
 if (NO_GUI)
-    target_sources(game INTERFACE ${SRC_DIR}/cli.c)
+    target_sources(game INTERFACE 
+        ${SRC_DIR}/cli.c
+        ${SRC_DIR}/server.c
+    )
 else()
-    target_sources(game INTERFACE ${SRC_DIR}/gui.c)
+    target_sources(game INTERFACE 
+        ${SRC_DIR}/gui.c
+        ${SRC_DIR}/server.c
+    )
 endif()
 

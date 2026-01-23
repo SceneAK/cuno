@@ -8,7 +8,7 @@
 #define PLAYER_NAME_MAX 64
 #define PLAYER_MAX 5
 #define PLAY_ARG_MAX 6
-#define CARD_HIDE(card) do { (card).type = CARD_UNKNOWN; (card).num = -1; (card).color = CARD_COLOR_MAX; } while()
+#define CARD_HIDE(card) do { (card).type = CARD_UNKNOWN; (card).num = -1; (card).color = CARD_COLOR_MAX; } while(0)
 
 enum card_color {
     CARD_COLOR_BLACK = -1,
@@ -50,6 +50,7 @@ struct card {
 };
 DEFINE_ARRAY_LIST_WRAPPER(static, struct card, card_list)
 struct player {
+    unsigned int        id;
     char                name[PLAYER_NAME_MAX];
     struct card_list    hand;
 };
@@ -83,9 +84,11 @@ static const struct play_arg PLAY_ARG_ZERO = {0};
 static const struct play_arg PLAY_ARGS_ZERO[PLAY_ARG_MAX] = {0};
 static const struct act_play ACT_PLAY_ZERO = {0};
 
-void game_state_copy(struct game_state *dst, const struct game_state *src);
-void game_state_init(struct game_state *game, int player_len, int deal);
+void game_state_init(struct game_state *game);
 void game_state_deinit(struct game_state *game);
+void game_state_copy_into(struct game_state *dst, const struct game_state *src);
+void game_state_start(struct game_state *game, int player_len, int deal);
+void game_state_for_player(struct game_state *game, int player_id);
 
 const struct card *game_state_get_card(const struct game_state *game, card_id_t card_id);
 int game_state_can_act_draw(const struct game_state *game);
@@ -101,8 +104,8 @@ void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const s
 vec3 card_color_to_rgb(enum card_color color);
 const char *card_type_to_str(enum card_type card_type);
 const char *card_color_to_str(enum card_color color);
-size_t log_card(char *buffer, size_t buffer_len, const struct card *card);
-size_t log_hand(char *buffer, size_t buffer_len, const struct player *player);
-size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game);
+size_t log_card(char *buffer, size_t buffer_len, const struct card *card, char hide_unknown);
+size_t log_hand(char *buffer, size_t buffer_len, const struct player *player, char hide_unknowns);
+size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game, char hide_unkowns);
 
 #endif

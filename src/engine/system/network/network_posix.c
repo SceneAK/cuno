@@ -40,6 +40,55 @@ u16 network_u16_to_net(u16 host) { return htons(host); }
 
 u32 network_u32_to_net(u32 host) { return htonl(host); }
 
+void network_buffer_init(struct network_buffer *buff, size_t capacity)
+{
+    buff->start = malloc(capacity);
+    buff->head  = buff->start;
+    buff->tail  = buff->start;
+    buff->end   = buff->start + capacity;
+}
+
+void network_buffer_deinit(struct network_buffer *buff)
+{
+    free(buff->start);
+}
+
+void network_buffer_compact(struct network_buffer *buff)
+{
+    const size_t LEN = NETWORK_BUFFER_LEN(*buff);
+
+    memmove(buff->start, buff->head, LEN);
+    buff->tail = buff->start + LEN;
+    buff->head = buff->start;
+}
+
+int network_buffer_make_space(struct network_buffer *buff, size_t space)
+{
+    if (buff->tail + space < buff->end)
+        return 0;
+    if (NETWORK_BUFFER_LEN(*buff) + space > NETWORK_BUFFER_CAPACITY(*buff))
+        return -1;
+    
+    network_buffer_compact(buff);
+    return 0;
+}
+
+int network_buffer_peek_hdrmsg(const struct network_buffer *buff)
+{
+    struct network_header hdr;
+    uint8_t *tempcursor = buff->head;
+    const size_t LEN = NETWORK_BUFFER_LEN(*buff);
+
+    if (LEN < NETHDR_SERIALIZED_SIZE) 
+        return 0;
+
+    network_header_deserialize(&hdr, &tempcursor);
+    if (LEN - NETHDR_SERIALIZED_SIZE < hdr.len)
+        return 0;
+    return 1;
+}
+
+
 struct network_connection *network_connection_create(const char* ipv4addr, short port)
 {
     struct network_connection *conn;
@@ -118,6 +167,28 @@ enum network_result network_connection_recv(struct network_connection *conn, uin
     return NETRES_SUCCESS;
 }
 
+void network_connection_sendrecv_nb(struct network_connection *conn, struct network_buffer *sendbuff, struct network_buffer *recvbuff)
+{
+    char status;
+
+    if (!conn)
+        return;
+
+    status = network_connection_poll(conn, NETWORK_POLLIN | NETWORK_POLLOUT);
+
+    if ((status & NETWORK_POLLOUT) && NETWORK_BUFFER_LEN(*sendbuff))
+        network_connection_send(conn, &sendbuff->head, sendbuff->tail);
+
+    if (status & NETWORK_POLLIN) {
+        while (1) {
+            network_connection_recv(conn, &recvbuff->tail, recvbuff->end);
+            if (recvbuff->tail != recvbuff->end)
+                break;
+            network_buffer_compact(recvbuff);
+        }
+    }
+}
+
 struct network_listener *network_listener_create(short port, int max_pending)
 {
     int                     sockfd;
@@ -164,32 +235,4 @@ struct network_connection *network_listener_accept(struct network_listener *list
 
     conn->sockfd = accept(listener->sockfd, NULL, NULL);
     return conn;
-}
-
-void network_buffer_init(struct network_buffer *buff, size_t capacity)
-{
-    buff->start = malloc(capacity);
-    buff->head  = buff->start;
-    buff->tail  = buff->start;
-    buff->end   = buff->start + capacity;
-}
-
-void network_buffer_deinit(struct network_buffer *buff)
-{
-    free(buff->start);
-}
-
-int network_buffer_make_space(struct network_buffer *buff, size_t space)
-{
-    const size_t LEN = NETWORK_BUFFER_LEN(*buff);
-
-    if (buff->tail + space < buff->end)
-        return 0;
-    if (LEN + space > NETWORK_BUFFER_CAPACITY(*buff))
-        return -1;
-
-    memmove(buff->start, buff->head, LEN);
-    buff->tail = buff->start + LEN;
-    buff->head = buff->start;
-    return 0;
 }
