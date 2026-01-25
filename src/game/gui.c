@@ -1,8 +1,10 @@
 #include <stdio.h>
-#include "engine/system/time.h"
-#include "engine/system/log.h"
+#include "engine/entity/keyboard.h"
+#include "engine/entity/world.h"
 #include "engine/system/graphic.h"
 #include "engine/system/asset.h"
+#include "engine/system/time.h"
+#include "engine/system/log.h"
 #include "engine/component.h"
 #include "engine/text.h"
 #include "engine/math.h"
@@ -56,13 +58,13 @@ static const struct game_state         *game_state = &game_state_mut;
 static struct graphic_session          *session;
 static struct graphic_session_info      session_info;
 
-static struct baked_font                font_default;
-static struct graphic_texture          *font_texture;
+static struct baked_font                font_spec_default;
+static struct graphic_texture          *font_tex;
 static struct graphic_vertecies        *card_vertecies;
 
 static float                            aspect_ratio;
 static float                            ortho_height;
-static vec3                             clear_color = VEC3_ONE;
+static vec3                             clear_color = {1, 1, 1};
 static mat4                             perspective;
 static mat4                             orthographic;
 
@@ -77,57 +79,17 @@ static enum {
     UI_STATE_SELECT_ARG,
 }                                       global_ui_state = UI_STATE_MAKE_ACT;
 
-/******* COMPONENT SYSTEMS *******/
-static struct entity_record             entity_record;
-static struct comp_system_family       *sys_fam;
-static struct comp_system_transform    *sys_transf;
-static struct comp_system_visual       *sys_visual;
-static struct comp_system_hitrect      *sys_hitrect;
-static struct comp_system_interpolator *sys_interp;
+/******* WORLDS *******/
+static struct entity_world              mainctx;
+static struct entity_world              menuctx;
 
 /******* TRACKED ENTITIES *******/
 static struct entity_list               entity_discards;
 static entity_t                         entity_draw_button;
 static entity_t                         entity_players[2];
 static entity_t                         entity_debug_text;
+static entity_t                         entity_keyboard;
 static entity_t                         entity_color_pickers[CARD_COLOR_MAX];
-
-static void comp_systems_init()
-{
-    struct comp_system base = { &entity_record };
-
-    entity_record_init(&entity_record);
-
-    base.component_flag = COMPFLAG_SYS_FAMILY;
-    sys_fam             = comp_system_family_create(base);
-
-    base.component_flag = COMPFLAG_SYS_TRANSFORM;
-    sys_transf          = comp_system_transform_create(base, sys_fam);
-
-    base.component_flag = COMPFLAG_SYS_VISUAL;
-    sys_visual          = comp_system_visual_create(base, sys_transf);
-
-    base.component_flag = COMPFLAG_SYS_HITRECT;
-    sys_hitrect         = comp_system_hitrect_create(base, sys_transf);
-
-    base.component_flag = COMPFLAG_SYS_INTERP;
-    sys_interp          = comp_system_interpolator_create(base, sys_transf);
-}
-void cleanup_recorded_component_flags(entity_t entity)
-{
-    component_flag_t flags = entity_record.component_flags[entity];
-    if (flags & COMPFLAG_SYS_FAMILY)
-        comp_system_family_disown(sys_fam, entity);
-    if (flags & COMPFLAG_SYS_TRANSFORM)
-        comp_system_transform_erase(sys_transf, entity);
-    if (flags & COMPFLAG_SYS_VISUAL)
-        comp_system_visual_erase(sys_visual, entity);
-    if (flags & COMPFLAG_SYS_HITRECT)
-        comp_system_hitrect_erase(sys_hitrect, entity);
-    if (flags & COMPFLAG_SYS_INTERP)
-        comp_system_interpolator_erase(sys_interp, entity);
-}
-
 
 void entity_discards_arrange()
 {
@@ -137,7 +99,7 @@ void entity_discards_arrange()
 
     for (i = 0; i < entity_discards.len; i++) {
         target.trans.z = DISCARD_PILE_TRANSFORM.trans.z - LAYER_DIST * (entity_discards.len - 1 - i);
-        comp_system_interpolator_change(sys_interp, entity_discards.elems[i], target);
+        comp_system_interpolator_change(mainctx.sys_interp, entity_discards.elems[i], target);
     }
 }
 static entity_t entity_card_create(const struct card *card)
@@ -152,18 +114,17 @@ static entity_t entity_card_create(const struct card *card)
     entity_t                    main,
                                 text;
 
-    main                    = entity_record_activate(&entity_record);
-    transf                  = comp_system_transform_emplace(sys_transf, main);
-    visual                  = comp_system_visual_emplace(sys_visual, main, PROJ_PERSP);
-    interp                  = comp_system_interpolator_emplace(sys_interp, main);
-    hitrect                 = comp_system_hitrect_emplace(sys_hitrect, main);
+    main                    = entity_record_activate(&mainctx.entrec);
+    transf                  = comp_system_transform_emplace(mainctx.sys_transf, main);
+    visual                  = comp_system_visual_emplace(mainctx.sys_vis, main, PROJ_PERSP);
+    interp                  = comp_system_interpolator_emplace(mainctx.sys_interp, main);
+    hitrect                 = comp_system_hitrect_emplace(mainctx.sys_hitrect, main);
     comp_transform_set_default(transf);
     comp_visual_set_default(visual);
     comp_interpolator_set_default(interp);
     comp_hitrect_set_default(hitrect);
     transf->data.rot        = vec3_create(0, -PI/16, 0);
     transf->data.scale      = vec3_all(1.7);
-    transf->synced          = 0;
     hitrect->rect           = CARD_BOUNDS;
     hitrect->type           = HITRECT_CAMSPACE;
     hitrect->hitmask        = HITMASK_MOUSE_DOWN;
@@ -175,9 +136,9 @@ static entity_t entity_card_create(const struct card *card)
 
     card_ids[main]          = card->id;
 
-    text                    = entity_record_activate(&entity_record);
-    transf                  = comp_system_transform_emplace(sys_transf, text);
-    visual                  = comp_system_visual_emplace(sys_visual, text, PROJ_PERSP);
+    text                    = entity_record_activate(&mainctx.entrec);
+    transf                  = comp_system_transform_emplace(mainctx.sys_transf, text);
+    visual                  = comp_system_visual_emplace(mainctx.sys_vis, text, PROJ_PERSP);
     comp_transform_set_default(transf);
     comp_visual_set_default(visual);
     transf->data.scale      = vec3_create(0.014f, 0.014f, 0.014f);
@@ -185,74 +146,73 @@ static entity_t entity_card_create(const struct card *card)
         case CARD_NUMBER:
             snprintf(temp, 8, "[ %i ]", card->num);
             transf->data.trans  = vec3_create(-CHAR_WIDTH*2.5, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, temp);
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, temp);
             break;
         case CARD_REVERSE:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*3.5, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ <-> ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ <-> ]");
             break;
         case CARD_SKIP:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ >> ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ >> ]");
             break;
         case CARD_PLUS2:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +2 ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ +2 ]");
             break;
         case CARD_PICK_COLOR:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*4, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ PICK ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ PICK ]");
             break;
         case CARD_PLUS4:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*3, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ +4 ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ +4 ]");
             break;
         default:
             transf->data.trans  = vec3_create(-CHAR_WIDTH*3.5, 0, TEXT_Z);
-            visual->vertecies   = graphic_vertecies_create_text(font_default, LINE_HEIGHT, "[ ??? ]");
+            visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ ??? ]");
             break;
     }
-    transf->synced = 0;
-    visual->texture      = font_texture;
+    visual->texture      = font_tex;
     visual->color        = card->color == CARD_COLOR_BLACK ? VEC3_ONE : VEC3_ZERO;
     visual->draw_pass    = DRAW_PASS_TRANSPARENT;
-    comp_system_family_adopt(sys_fam, main, text);
+    comp_system_family_adopt(mainctx.sys_fam, main, text);
 
     return main;
 }
 static void entity_card_destroy(entity_t main)
 {
     size_t index;
-    entity_t text = comp_system_family_view(sys_fam).first_child_map[main];
+    entity_t text = comp_system_family_view(mainctx.sys_fam).first_child_map[main];
 
-    graphic_vertecies_destroy(comp_system_visual_get(sys_visual, text)->vertecies);
+    graphic_vertecies_destroy(comp_system_visual_get(mainctx.sys_vis, text)->vertecies);
 
     card_ids[main] = -1;
 
-    cleanup_recorded_component_flags(main);
-    cleanup_recorded_component_flags(text);
+    entity_world_cleanup(&mainctx, main);
+    entity_world_cleanup(&mainctx, text);
 
-    entity_record_deactivate(&entity_record, main);
-    entity_record_deactivate(&entity_record, text);
+    entity_record_deactivate(&mainctx.entrec, main);
+    entity_record_deactivate(&mainctx.entrec, text);
 }
 /* TODO: Factor a "move_by" system */
 static void entity_card_start_raise(entity_t card) 
 {
     struct transform    target;
 
-    target = comp_system_transform_get(sys_transf, card)->data;
+    target = comp_system_transform_get(mainctx.sys_transf, card)->data;
     target.trans.y += CARD_RAISE_DIST;
-    comp_system_interpolator_finish(sys_interp, card);
-    comp_system_interpolator_start(sys_interp, card, target);
+    comp_system_interpolator_finish(mainctx.sys_interp, card);
+    comp_system_interpolator_start(mainctx.sys_interp, card, target);
 }
 static void entity_card_start_unraise(entity_t card)
 {
     struct transform    target;
 
-    target = comp_system_transform_get(sys_transf, card)->data;
+    target = comp_system_transform_get(mainctx.sys_transf, card)->data;
     target.trans.y -= CARD_RAISE_DIST;
-    comp_system_interpolator_finish(sys_interp, card);
-    comp_system_interpolator_start(sys_interp, card, target);
+    comp_system_interpolator_finish(mainctx.sys_interp, card);
+    comp_system_interpolator_start(mainctx.sys_interp, card, target);
 }
 static void entity_discards_free_old()
 {
@@ -278,25 +238,25 @@ static void entity_player_add_cards(entity_t player, const struct card *cards, i
                             transf_draw_pile_local;
     int                     i, child_count;
 
-    target = comp_system_transform_get(sys_transf, player)->data;
+    target = comp_system_transform_get(mainctx.sys_transf, player)->data;
     transf_draw_pile_local      = transform_relative(&target, &DRAW_PILE_TRANSFORM);
 
-    child_count = comp_system_family_count_children(sys_fam, player);
-    entity_card = comp_system_family_find_last_child(sys_fam, player);
+    child_count = comp_system_family_count_children(mainctx.sys_fam, player);
+    entity_card = comp_system_family_find_last_child(mainctx.sys_fam, player);
 
     for (i = 0; i < amount; i++) {
         entity_card             = entity_card_create(cards + i);
-        comp_transf_card        = comp_system_transform_get(sys_transf, entity_card);
+        comp_transf_card        = comp_system_transform_get(mainctx.sys_transf, entity_card);
 
-        comp_system_transform_desync(sys_transf, entity_card);
-        comp_system_family_adopt(sys_fam, player, entity_card);
+        comp_system_transform_desync(mainctx.sys_transf, entity_card);
+        comp_system_family_adopt(mainctx.sys_fam, player, entity_card);
         
-        target = comp_system_transform_get(sys_transf, entity_card)->data;
+        target = comp_system_transform_get(mainctx.sys_transf, entity_card)->data;
         target.trans.x          = ENTITY_CARD_DIST * (child_count + i);
         target.trans.y          = 0;
         target.trans.z          = 0;
         comp_transf_card->data  = transf_draw_pile_local;
-        comp_system_interpolator_start(sys_interp, entity_card, target);
+        comp_system_interpolator_start(mainctx.sys_interp, entity_card, target);
     }
 }
 static int entity_player_remove_card(entity_t entity_card)
@@ -308,7 +268,7 @@ static int entity_player_remove_card(entity_t entity_card)
 
     if (entity_is_invalid(entity_card))
         return -1;
-    family_view     = comp_system_family_view(sys_fam);
+    family_view     = comp_system_family_view(mainctx.sys_fam);
     current         = family_view.first_child_map[family_view.parent_map[entity_card]];
 
     
@@ -316,18 +276,18 @@ static int entity_player_remove_card(entity_t entity_card)
     current = family_view.sibling_map[current];
     
     while(!entity_is_invalid(current)) {
-        target          = comp_system_transform_get(sys_transf, current)->data;
+        target          = comp_system_transform_get(mainctx.sys_transf, current)->data;
         target.trans.x  = ENTITY_CARD_DIST * counter;
         target.trans.y  = 0;
         target.trans.z  = 0;
-        comp_system_interpolator_change(sys_interp, current, target);
+        comp_system_interpolator_change(mainctx.sys_interp, current, target);
 
         current = family_view.sibling_map[current];
         counter++;
     }
-    comp_system_transform_get(sys_transf, entity_card)->data = comp_system_transform_get_world(sys_transf, entity_card);
-    comp_system_family_disown(sys_fam, entity_card);
-    comp_system_transform_desync(sys_transf, entity_card);
+    comp_system_transform_get(mainctx.sys_transf, entity_card)->data = comp_system_transform_get_world(mainctx.sys_transf, entity_card);
+    comp_system_family_disown(mainctx.sys_fam, entity_card);
+    comp_system_transform_desync(mainctx.sys_transf, entity_card);
     return 0;
 }
 
@@ -335,7 +295,7 @@ void entity_discards_discard(entity_t entity_card)
 {
     entity_player_remove_card(entity_card);
     entity_list_append(&entity_discards, &entity_card, 1);
-    comp_system_hitrect_get(sys_hitrect, entity_card)->active = 1;
+    comp_system_hitrect_get(mainctx.sys_hitrect, entity_card)->active = 1;
 }
 
 static void scene_remove_player_cards(const struct player *player, entity_t entity_player)
@@ -347,7 +307,7 @@ static void scene_remove_player_cards(const struct player *player, entity_t enti
     int                             children_count;
     int                             i;
 
-    family_view = comp_system_family_view(sys_fam);
+    family_view = comp_system_family_view(mainctx.sys_fam);
     entity_card = next = family_view.first_child_map[entity_player];
 
     for (; !entity_is_invalid(entity_card); entity_card = next) {
@@ -379,7 +339,7 @@ static void scene_add_player_cards(const struct player *player, entity_t entity_
 
     entity_discards_free_old();
     /* relies on game_state appending behaviour */
-    entity_card_len = comp_system_family_count_children(sys_fam, entity_player);
+    entity_card_len = comp_system_family_count_children(mainctx.sys_fam, entity_player);
     entity_player_add_cards(entity_player, player->hand.elems + entity_card_len, player->hand.len - entity_card_len); 
 }
 static void scene_mirror_turn()
@@ -409,8 +369,8 @@ static int resources_init(struct graphic_session *created_session)
 
     handle = asset_open(ASSET_PATH_FONT);
     if (asset_read(buffer, 1<<19, handle)) {
-        font_default = create_ascii_baked_font(buffer);
-        font_texture = graphic_texture_create(font_default.width, font_default.height, font_default.bitmap, 1);
+        font_spec_default = create_ascii_baked_font(buffer);
+        font_tex = graphic_texture_create(font_spec_default.width, font_spec_default.height, font_spec_default.bitmap, 1);
     }
     asset_close(handle);
 
@@ -427,8 +387,8 @@ static entity_t entity_player_create(const struct player *player)
     struct comp_transform *transf;
     entity_t               entity_player;
 
-    entity_player = entity_record_activate(&entity_record);
-    transf = comp_system_transform_emplace(sys_transf, entity_player);
+    entity_player = entity_record_activate(&mainctx.entrec);
+    transf = comp_system_transform_emplace(mainctx.sys_transf, entity_player);
     comp_transform_set_default(transf);
     entity_player_add_cards(entity_player, player->hand.elems, player->hand.len);
 
@@ -437,47 +397,60 @@ static entity_t entity_player_create(const struct player *player)
 static void change_debug_text(const char* str)
 {
     struct comp_visual *visual;
-    visual = comp_system_visual_get(sys_visual, entity_debug_text);
+    visual = comp_system_visual_get(mainctx.sys_vis, entity_debug_text);
     if (visual->vertecies)
         graphic_vertecies_destroy(visual->vertecies);
-    visual->vertecies = graphic_vertecies_create_text(font_default, LINE_HEIGHT, str);
+    visual->vertecies = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, str);
 }
 
-static void entities_init()
+static void on_key_hit(entity_t e, struct comp_hitrect *hitrect)
+{
+}
+
+static void tracked_entities_init()
 {
     struct comp_transform       *transf;
     struct comp_visual          *visual;
     struct comp_hitrect         *hitrect;
     struct comp_interpolator    *interp;
-    int i;
+
+    struct entity_keyboard_opt kbopt = {
+        .layout = KBLAYOUT_NUMPAD,
+        .padding = 70,
+        .keysize = 50,
+        .hit_handler = on_key_hit,
+        .font_spec = &font_spec_default,
+        .font_tex = font_tex,
+    };
 
     entity_t temp;
+    int i;
 
     entity_list_init(&entity_discards, 1);
     play_list_init(&staged_plays, 1);
 
     temp = entity_card_create(&game_state->top_card);
     entity_list_append(&entity_discards, &temp, 1);
-    comp_system_interpolator_change(sys_interp, temp, DISCARD_PILE_TRANSFORM);
+    comp_system_interpolator_change(mainctx.sys_interp, temp, DISCARD_PILE_TRANSFORM);
 
     entity_players[0]       = entity_player_create(game_state->players + 0);
-    transf                  = comp_system_transform_get(sys_transf, entity_players[0]);
+    transf                  = comp_system_transform_get(mainctx.sys_transf, entity_players[0]);
     transf->data.trans      = vec3_create(-4.2f, -5.5, -10);
     transf->data.rot        = vec3_create(-PI/8, 0, 0);
     transf->data.scale      = vec3_create(0.4, 0.4, 0.4); 
-    transf->synced          = 0;
+    comp_system_transform_desync(mainctx.sys_transf, entity_players[0]);
 
     entity_players[1]       = entity_player_create(game_state->players + 1);
-    transf                  = comp_system_transform_get(sys_transf, entity_players[1]);
+    transf                  = comp_system_transform_get(mainctx.sys_transf, entity_players[1]);
     transf->data.trans      = vec3_create(-4.2f, 5.5, -10);
     transf->data.rot        = vec3_create(PI/8, 0, 0); 
     transf->data.scale      = vec3_create(0.3, 0.3, 0.3);
-    transf->synced          = 0;
+    comp_system_transform_desync(mainctx.sys_transf, entity_players[1]);
 
-    entity_draw_button      = entity_record_activate(&entity_record);
-    transf                  = comp_system_transform_emplace(sys_transf, entity_draw_button);
-    visual                  = comp_system_visual_emplace(sys_visual, entity_draw_button, PROJ_ORTHO);
-    hitrect                 = comp_system_hitrect_emplace(sys_hitrect, entity_draw_button);
+    entity_draw_button      = entity_record_activate(&mainctx.entrec);
+    transf                  = comp_system_transform_emplace(mainctx.sys_transf, entity_draw_button);
+    visual                  = comp_system_visual_emplace(mainctx.sys_vis, entity_draw_button, PROJ_ORTHO);
+    hitrect                 = comp_system_hitrect_emplace(mainctx.sys_hitrect, entity_draw_button);
     comp_transform_set_default(transf);
     comp_visual_set_default(visual);
     comp_hitrect_set_default(hitrect);
@@ -491,24 +464,30 @@ static void entities_init()
     hitrect->type           = HITRECT_ORTHOSPACE;
     hitrect->hitmask        = HITMASK_MOUSE_DOWN;
 
-    entity_debug_text       = entity_record_activate(&entity_record);
-    transf                  = comp_system_transform_emplace(sys_transf, entity_debug_text);
-    visual                  = comp_system_visual_emplace(sys_visual, entity_debug_text, PROJ_ORTHO);
+    entity_debug_text       = entity_record_activate(&mainctx.entrec);
+    transf                  = comp_system_transform_emplace(mainctx.sys_transf, entity_debug_text);
+    visual                  = comp_system_visual_emplace(mainctx.sys_vis, entity_debug_text, PROJ_ORTHO);
     comp_transform_set_default(transf);
     comp_visual_set_default(visual);
     transf->data.trans      = vec3_create(-500, 200, -1);
     transf->data.scale      = vec3_create(0.6, 0.6, 0.6);
     transf->synced          = 0;
-    visual->texture         = font_texture;
+    visual->texture         = font_tex;
     visual->color           = VEC3_ZERO;
     visual->draw_pass       = DRAW_PASS_TRANSPARENT;
 
+    entity_keyboard         = entity_keyboard_create(&mainctx, &kbopt);
+    transf                  = comp_system_transform_get(mainctx.sys_transf, entity_keyboard);
+    comp_transform_set_default(transf);
+    transf->data.trans.z    = -1;
+    comp_system_transform_desync(mainctx.sys_transf, entity_keyboard);
+
     for (i = 0; i < CARD_COLOR_MAX; i++) {
-        entity_color_pickers[i] = entity_record_activate(&entity_record);
-        transf                  = comp_system_transform_emplace(sys_transf, entity_color_pickers[i]);
-        visual                  = comp_system_visual_emplace(sys_visual, entity_color_pickers[i], PROJ_PERSP);
-        hitrect                 = comp_system_hitrect_emplace(sys_hitrect, entity_color_pickers[i]);
-        interp                  = comp_system_interpolator_emplace(sys_interp, entity_color_pickers[i]);
+        entity_color_pickers[i] = entity_record_activate(&mainctx.entrec);
+        transf                  = comp_system_transform_emplace(mainctx.sys_transf, entity_color_pickers[i]);
+        visual                  = comp_system_visual_emplace(mainctx.sys_vis, entity_color_pickers[i], PROJ_PERSP);
+        hitrect                 = comp_system_hitrect_emplace(mainctx.sys_hitrect, entity_color_pickers[i]);
+        interp                  = comp_system_interpolator_emplace(mainctx.sys_interp, entity_color_pickers[i]);
         comp_hitrect_set_default(hitrect);
         comp_transform_set_default(transf);
         comp_visual_set_default(visual);
@@ -529,7 +508,7 @@ static void enable_popup_play_arg_color(entity_t entity_card)
 {
     int                 i;
     const float         DIST                    = 0.62f;
-    struct transform    card_transf             = comp_system_transform_get_world(sys_transf, entity_card);
+    struct transform    card_transf             = comp_system_transform_get_world(mainctx.sys_transf, entity_card);
     struct transform    targets[CARD_COLOR_MAX];
 
     card_transf.rot     = vec3_create(0, 0, PI/4);
@@ -543,11 +522,11 @@ static void enable_popup_play_arg_color(entity_t entity_card)
     targets[CARD_COLOR_YELLOW].trans    = vec3_create(card_transf.trans.x + DIST, card_transf.trans.y - DIST, card_transf.trans.z + DIST);
 
     for (i = 0; i < CARD_COLOR_MAX; i++) {
-        comp_system_transform_get(sys_transf, entity_color_pickers[i])->data.trans      = card_transf.trans;
-        comp_system_visual_get(sys_visual, entity_color_pickers[i])->draw_pass          = DRAW_PASS_OPAQUE;
-        comp_system_hitrect_get(sys_hitrect, entity_color_pickers[i])->active           = 1;
+        comp_system_transform_get(mainctx.sys_transf, entity_color_pickers[i])->data.trans      = card_transf.trans;
+        comp_system_visual_get(mainctx.sys_vis, entity_color_pickers[i])->draw_pass             = DRAW_PASS_OPAQUE;
+        comp_system_hitrect_get(mainctx.sys_hitrect, entity_color_pickers[i])->active           = 1;
 
-        comp_system_interpolator_start(sys_interp, entity_color_pickers[(enum card_color)i], targets[(enum card_color)i]);
+        comp_system_interpolator_start(mainctx.sys_interp, entity_color_pickers[(enum card_color)i], targets[(enum card_color)i]);
     }
 }
 static void disable_popup_play_arg_color()
@@ -555,8 +534,8 @@ static void disable_popup_play_arg_color()
     int i;
 
     for (i = 0; i < CARD_COLOR_MAX; i++) {
-        comp_system_visual_get(sys_visual, entity_color_pickers[i])->draw_pass = DRAW_PASS_NONE;
-        comp_system_hitrect_get(sys_hitrect, entity_color_pickers[i])->active = 0;
+        comp_system_visual_get(mainctx.sys_vis, entity_color_pickers[i])->draw_pass = DRAW_PASS_NONE;
+        comp_system_hitrect_get(mainctx.sys_hitrect, entity_color_pickers[i])->active = 0;
     }
 }
 static void enable_popup_play_arg_target_player()
@@ -653,7 +632,7 @@ static void staged_plays_clear()
     entity_t                        entity_card;
     size_t                          i;
 
-    view        = comp_system_family_view(sys_fam);
+    view        = comp_system_family_view(mainctx.sys_fam);
     entity_card = view.first_child_map[entity_players[0]];
 
     for (;!entity_is_invalid(entity_card); entity_card = view.sibling_map[entity_card]) {
@@ -675,7 +654,7 @@ static void end_turn()
     game_state_end_turn(&game_state_mut);
     
     log_game_state(game_log_buff, sizeof(game_log_buff), game_state, 0);
-    change_debug_text(game_log_buff);
+    /* change_debug_text(game_log_buff); */
     cuno_logf(LOG_INFO, game_log_buff);
 }
 static void on_state_select_arg()
@@ -689,7 +668,7 @@ static void on_state_select_arg()
     }
 
     for (color = 0; color < CARD_COLOR_MAX; color++) {
-        if (!comp_system_hitrect_check_and_clear_state(sys_hitrect, entity_color_pickers[color]))
+        if (!comp_system_hitrect_check_and_clear_state(mainctx.sys_hitrect, entity_color_pickers[color]))
             continue;
 
         curr_play.args[i].type      = PLAY_ARG_COLOR;
@@ -731,11 +710,11 @@ static void on_state_make_act()
                                     entity_card;
     int                             i;
 
-    view        = comp_system_family_view(sys_fam);
+    view        = comp_system_family_view(mainctx.sys_fam);
     entity_card = view.first_child_map[entity_players[0]];
 
     while (!entity_is_invalid(entity_card)) {
-        if (comp_system_hitrect_check_and_clear_state(sys_hitrect, entity_card))
+        if (comp_system_hitrect_check_and_clear_state(mainctx.sys_hitrect, entity_card))
             break;
 
         entity_card = view.sibling_map[entity_card];
@@ -744,18 +723,19 @@ static void on_state_make_act()
         on_card_hit(entity_card);
 
     top_card = entity_discards.elems[entity_discards.len-1];
-    if (comp_system_hitrect_check_and_clear_state(sys_hitrect, top_card) && staged_plays.len > 0) {
+    if (comp_system_hitrect_check_and_clear_state(mainctx.sys_hitrect, top_card) && staged_plays.len > 0) {
         game_state_copy_into(&game_state_mut, &game_state_alt);
         end_turn();
         return;
     }
 
-    if (comp_system_hitrect_check_and_clear_state(sys_hitrect, entity_draw_button)) {
+    if (comp_system_hitrect_check_and_clear_state(mainctx.sys_hitrect, entity_draw_button)) {
         game_state_act_draw(&game_state_mut);
         end_turn();
         return;
     }
 }
+
 static void on_hitrect_state_update()
 {
     if (game_state->active_player_index != 0)
@@ -775,7 +755,7 @@ static void on_hitrect_state_update()
 static void render()
 {
     graphic_clear(clear_color.x, clear_color.y, clear_color.z);
-    comp_system_visual_draw(sys_visual, &perspective, &orthographic);
+    comp_system_visual_draw(mainctx.sys_vis, &perspective, &orthographic);
     graphic_render(session);
 }
 
@@ -815,8 +795,8 @@ int game_init(struct graphic_session *created_session)
     game_state_init(&game_state_mut);
     game_state_start(&game_state_mut, PLAYER_AMOUNT, DEAL_PER_PLAYER);
 
-    comp_systems_init();
-    entities_init();
+    entity_world_init(&mainctx);
+    tracked_entities_init();
 
     log_game_state(game_log_buff, sizeof(game_log_buff), game_state, 0);
     change_debug_text(game_log_buff);
@@ -828,8 +808,8 @@ void game_update()
     if (!session)
         return;
 
-    comp_system_transform_sync_matrices(sys_transf);
-    comp_system_interpolator_update(sys_interp);
+    comp_system_transform_sync_matrices(mainctx.sys_transf);
+    comp_system_interpolator_update(mainctx.sys_interp);
     player1_update();
 
     render();
@@ -845,7 +825,7 @@ void game_mouse_event(struct mouse_event event)
                               event.type == MOUSE_HOLD ? HITMASK_MOUSE_HOLD :
                               HITMASK_MOUSE_HOVER;
  
-    comp_system_hitrect_update(sys_hitrect, &mouse_orthospace, &mouse_camspace_ray, mask); 
+    comp_system_hitrect_update(mainctx.sys_hitrect, &mouse_orthospace, &mouse_camspace_ray, mask); 
     on_hitrect_state_update();
-    comp_system_hitrect_clear_states(sys_hitrect); /* Forces checks every frame, wastefully */
+    comp_system_hitrect_clear_states(mainctx.sys_hitrect); /* Forces checks every frame, wastefully */
 }

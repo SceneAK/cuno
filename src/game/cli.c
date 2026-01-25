@@ -19,7 +19,6 @@ void print_spinner()
     spinner_idx = (spinner_idx + 1) % ARRAY_SIZE(SPINNER);
 }
 
-/********* CLIENT **********/
 static struct game_state     client_state = {0};
        char                  client_youvegotmail = 0;
 static int                   client_playerid = -1;

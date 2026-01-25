@@ -9,9 +9,13 @@ typedef struct { float m[4][4]; } mat4;
 typedef struct { float x, y; }    vec2;
 typedef struct { float x, y, z; } vec3;
 
-static const vec3 VEC3_ONE  = { 1, 1, 1 };
-static const vec3 VEC3_ZERO = { 0, 0, 0 };
-static const mat4 MAT4_IDENTITY  =  { {
+static const vec3 VEC3_RED      = { 1, 0, 0 };
+static const vec3 VEC3_GREEN    = { 0, 1, 0 };
+static const vec3 VEC3_BLUE     = { 0, 0, 1 };
+static const vec3 VEC3_ONE      = { 1, 1, 1 };
+static const vec3 VEC3_ZERO     = { 0, 0, 0 };
+
+static const mat4 MAT4_IDENTITY = { {
         { 1, 0, 0, 0 },
         { 0, 1, 0, 0 },
         { 0, 0, 1, 0 },
@@ -21,7 +25,6 @@ struct transform {
 };
 
 static const struct transform TRANSFORM_ZERO = {0};
-static struct transform a, b;
 
 /* VECTORS */
 static inline vec2 vec2_create(float x, float y)
@@ -131,6 +134,16 @@ typedef struct {
     float x0; float y0; 
     float x1; float y1;
 } rect2D;
+
+static rect2D rect2D_add(rect2D rect, float x, float y)
+{
+    rect2D result = {
+        rect.x0 + x, rect.y0 + y,
+        rect.x1 + x, rect.y1 = y
+    };
+    return result;
+}
+
 static const rect2D RECT2D_ZERO = {0, 0, 0, 0};
 
 /* UTILS */

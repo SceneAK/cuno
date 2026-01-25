@@ -15,6 +15,50 @@
 #define entity_record_flag_component(entrec_ptr, entity, flag) (entrec_ptr)->component_flags[entity] |= flag
 #define entity_record_unflag_component(entrec, entity, flag) (entrec)->component_flags[entity] &= ~(flag)
 
+#define DEFINE_COMPONENT_POOL_STRUCT(type, name) \
+    struct name { \
+        short           sparse[ENTITY_MAX]; \
+        entity_t        dense[ENTITY_MAX]; \
+        size_t          len, \
+                        allocated_len; \
+        type           *data; \
+    };
+#define DEFINE_COMPONENT_POOL_INIT(type, name) \
+    int name##_init(struct name *pool, size_t initial_alloc_len) \
+    { \
+        return component_pool_init((struct component_pool *)pool, initial_alloc_len, sizeof(type)); \
+    }
+#define DEFINE_COMPONENT_POOL_DEINIT(type, name) \
+    void name##_deinit(struct name *pool) \
+    { \
+        component_pool_deinit((struct component_pool *)pool); \
+    }
+#define DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
+    type *name##_emplace(struct name *pool, entity_t entity) \
+    { \
+        return (type *)component_pool_emplace((struct component_pool *)pool, entity, sizeof(type)); \
+    }
+#define DEFINE_COMPONENT_POOL_ERASE(type, name) \
+    int name##_erase(struct name *pool, entity_t entity) \
+    { \
+        return component_pool_erase((struct component_pool *)pool, entity, sizeof(type)); \
+    }
+#define DEFINE_COMPONENT_POOL_TRY_GET(type, name) \
+    type *name##_try_get(struct name *pool, entity_t entity) \
+    { \
+        if (entity == ENTITY_INVALID || pool->sparse[entity] == -1) \
+            return NULL; \
+        return pool->data + pool->sparse[entity];  \
+    }
+#define DEFINE_COMPONENT_POOL(static_inline, type, name) \
+    DEFINE_COMPONENT_POOL_STRUCT(type, name) \
+    static_inline DEFINE_COMPONENT_POOL_INIT(type, name) \
+    static_inline DEFINE_COMPONENT_POOL_DEINIT(type, name) \
+    static_inline DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
+    static_inline DEFINE_COMPONENT_POOL_ERASE(type, name) \
+    static_inline DEFINE_COMPONENT_POOL_TRY_GET(type, name)
+
+
 typedef unsigned short entity_t;
 typedef unsigned int component_flag_t;
 
@@ -85,7 +129,7 @@ struct comp_visual {
 };
 enum hitrect_type {
     HITRECT_CAMSPACE, 
-    HITRECT_ORTHOSPACE
+    HITRECT_ORTHOSPACE,
 };
 struct comp_hitrect {
     mat4                        cached_matrix_inv;
@@ -95,6 +139,7 @@ struct comp_hitrect {
     enum hitrect_type           type;
     unsigned char               state;
     unsigned char               hitmask;
+    unsigned char               tag;
     unsigned char               active;
     void                        (*hit_handler)(entity_t entity, struct comp_hitrect *hitrect);
 };
@@ -129,8 +174,10 @@ struct comp_transform *comp_system_transform_emplace(struct comp_system_transfor
 void comp_system_transform_erase(struct comp_system_transform *sys, entity_t entity);
 struct comp_transform *comp_system_transform_get(struct comp_system_transform *sys, entity_t entity);
 void comp_system_transform_desync(struct comp_system_transform *system, entity_t entity);
+void comp_system_transform_desync_everything(struct comp_system_transform *sys);
 void comp_system_transform_sync_matrices(struct comp_system_transform *sys);
 struct transform comp_system_transform_get_world(struct comp_system_transform *sys, entity_t entity);
+struct transform comp_system_transform_get_relative(struct comp_system_transform *sys, entity_t parent, entity_t subject);
 
 void comp_visual_set_default(struct comp_visual *visual);
 struct comp_system_visual *comp_system_visual_create(struct comp_system base, struct comp_system_transform *sys_transf);

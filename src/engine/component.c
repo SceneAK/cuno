@@ -6,51 +6,6 @@
 #include "engine/system/time.h"
 #include "engine/component.h"
 
-#define DEFINE_COMPONENT_POOL_STRUCT(type, name) \
-    struct name { \
-        short           sparse[ENTITY_MAX]; \
-        entity_t        dense[ENTITY_MAX]; \
-        size_t          len, \
-                        allocated_len; \
-        type           *data; \
-    };
-#define DEFINE_COMPONENT_POOL_INIT(type, name) \
-    int name##_init(struct name *pool, size_t initial_alloc_len) \
-    { \
-        return component_pool_init((struct component_pool *)pool, initial_alloc_len, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_DEINIT(type, name) \
-    void name##_deinit(struct name *pool) \
-    { \
-        component_pool_deinit((struct component_pool *)pool); \
-    }
-#define DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
-    type *name##_emplace(struct name *pool, entity_t entity) \
-    { \
-        return (type *)component_pool_emplace((struct component_pool *)pool, entity, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_ERASE(type, name) \
-    int name##_erase(struct name *pool, entity_t entity) \
-    { \
-        return component_pool_erase((struct component_pool *)pool, entity, sizeof(type)); \
-    }
-#define DEFINE_COMPONENT_POOL_TRY_GET(type, name) \
-    type *name##_try_get(struct name *pool, entity_t entity) \
-    { \
-        if (entity == ENTITY_INVALID || pool->sparse[entity] == -1) \
-            return NULL; \
-        return pool->data + pool->sparse[entity];  \
-    }
-#define DEFINE_COMPONENT_POOL(static_inline, type, name) \
-    DEFINE_COMPONENT_POOL_STRUCT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_INIT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_DEINIT(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_EMPLACE(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_ERASE(type, name) \
-    static_inline DEFINE_COMPONENT_POOL_TRY_GET(type, name)
-
-
-/* SPARSE ENTITY SET*/
 struct component_pool {
     short           sparse[ENTITY_MAX];
     entity_t        dense[ENTITY_MAX];
@@ -71,10 +26,12 @@ int component_pool_init(struct component_pool *pool, size_t initial_alloc_len, s
     pool->data = malloc(initial_alloc_len * elem_size);
     return pool->data != NULL;
 }
+
 void component_pool_deinit(struct component_pool *pool)
 {
     free(pool->data);
 }
+
 void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_t elem_size)
 {
     if (entity_is_invalid(entity)) {
@@ -96,6 +53,7 @@ void *component_pool_emplace(struct component_pool *pool, entity_t entity, size_
     }
     return (char *)pool->data + (pool->len - 1)*elem_size;
 }
+
 int component_pool_erase(struct component_pool *pool, entity_t entity, size_t elem_size)
 {
     entity_t last_entity;
@@ -118,7 +76,6 @@ int component_pool_erase(struct component_pool *pool, entity_t entity, size_t el
     pool->sparse[entity] = -1;
     return 0;
 }
-
 
 
 #define COMP_POOL_INITIAL_ALLOC 32
@@ -326,8 +283,6 @@ void comp_system_transform_desync(struct comp_system_transform *sys, entity_t en
         return;
     }
 
-    if (!transf->synced)
-        return;
     transf->synced = 0;
 
     child = sys->sys_family->first_child_map[entity];
@@ -339,9 +294,21 @@ void comp_system_transform_desync(struct comp_system_transform *sys, entity_t en
         if (transf)
             transf->synced = 0;
 
+        if (!entity_is_invalid(sys->sys_family->first_child_map[child]))
+            comp_system_transform_desync(sys, child);
+
         child = sys->sys_family->sibling_map[child];
     }
 }
+
+void comp_system_transform_desync_everything(struct comp_system_transform *sys)
+{
+    int i;
+    
+    for (i = 0; i < sys->pool.len; i++)
+        sys->pool.data[i].synced = 0;
+}
+
 static void comp_system_transform_sync_matrix(struct comp_system_transform *sys, size_t data_index)
 {
     struct comp_transform *transf, *parent_transf;
