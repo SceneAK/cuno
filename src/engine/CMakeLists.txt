@@ -49,5 +49,12 @@ if (ANDROID)
 elseif(EMSCRIPTEN)
     message(STATUS "TEST EMSCRIPTEN")
 else()
-    message(STATUS "TEST ELSE")
+    message(STATUS "DEFAULT POSIX CLI")
+    target_sources(engine_static PRIVATE 
+        ${SRC_DIR}/engine/system/log/log_stdio.c
+        ${SRC_DIR}/engine/system/asset/asset_stdio.c
+        ${SRC_DIR}/engine/system/time/time_posix.c
+        ${SRC_DIR}/engine/system/network/network_posix.c
+    )
+    option(NO_GUI, ON)
 endif()

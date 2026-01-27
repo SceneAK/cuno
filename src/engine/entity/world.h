@@ -22,7 +22,7 @@ struct entity_world {
 
 static struct graphic_vertecies *_default_square = NULL;
 #define DEFAULT_SQUARE_VERT_GET() (_default_square ? _default_square : \
-        (_default_square = graphic_vertecies_create(SQUARE_VERTS, ARRAY_SIZE(SQUARE_VERTS))));
+        (_default_square = graphic_vertecies_create(SQUARE_VERTS, VERT_COUNT(SQUARE_VERTS))));
 
 
 static void entity_world_init(struct entity_world *world)

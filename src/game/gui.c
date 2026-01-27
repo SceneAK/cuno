@@ -3,6 +3,7 @@
 #include "engine/entity/control.h"
 #include "engine/entity/world.h"
 #include "engine/system/graphic.h"
+#include "engine/system/network.h"
 #include "engine/system/asset.h"
 #include "engine/system/time.h"
 #include "engine/system/log.h"
@@ -12,6 +13,7 @@
 
 #include "engine/game.h"
 #include "logic.h"
+#include "serialize.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
 
@@ -50,6 +52,7 @@ static const struct transform           DRAW_PILE_TRANSFORM = {
 };
 static const float                      CARD_RAISE_DIST = 5.0f;
 static const float                      LINE_HEIGHT = -30.0f;
+static const float                      CUNO_PORT = 7777;
 
 /******* RESOURCES *******/
 static struct game_state                game_state_alt;
@@ -409,43 +412,49 @@ static entity_t entity_player_create(const struct player *player)
 
 static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
 {
-    int len = strlen(ipv4_chrbuff);
-    int i, 
-        last_dot_idx = -1, 
-        last_octet_digits = 0,
-        num_octets = 1;
+    static int octet_count = 1;
+    static int octet_idx = 0;
+    static int digits = 0;
 
-    for (i = len-1; i >= 0; i--) {
-        if (ipv4_chrbuff[i] != '.')
-            continue;
-
-        if (last_dot_idx == -1)
-            last_dot_idx = i;
-
-        num_octets++;
+    if (octet_count > 4) {
+        octet_count = 1;
+        digits = 0;
+        octet_idx = 0;
+        ipv4_chrbuff[octet_idx + digits] = '\0';
     }
 
-    last_octet_digits = len - (last_dot_idx+1);
-    if (last_octet_digits < 3) {
-        ipv4_chrbuff[len] = (char)hitrect->tag;
-        ipv4_chrbuff[++len] = '\0';
-    } else {
-        if (num_octets < 4)
-            snprintf(ipv4_chrbuff + (last_dot_idx+1), sizeof(ipv4_chrbuff) - last_dot_idx, "%d.", atoi(ipv4_chrbuff + (last_dot_idx+1)));
-        else
-            ipv4_chrbuff[0] = '\0';
+    if (digits < 3) {
+        ipv4_chrbuff[octet_idx + digits] = (char)hitrect->tag;
+        digits++;
+        ipv4_chrbuff[octet_idx + digits] = '\0';
+    }
+
+    if (digits >= 3) {
+        cuno_logf(LOG_INFO, "dot_idx:%d", octet_idx);
+        octet_idx += snprintf(ipv4_chrbuff + octet_idx, sizeof(ipv4_chrbuff) - octet_idx, 
+                        octet_count < 4 ? "%d." : "%d", atoi(ipv4_chrbuff + octet_idx));
+
+        octet_count++;
+        digits = 0;
     }
     entity_text_change(&world_menu, &default_txtopt, menu_entity_txt_ipv4, ipv4_chrbuff);
+
+    cuno_logf(LOG_INFO, "octets: %d, digits: %d, octet_idx: %d", octet_count, digits, octet_idx);
 }
 
 static void on_host_btn(entity_t e, struct comp_hitrect *hitrect)
 {
-    
 }
 
 static void on_connect_btn(entity_t e, struct comp_hitrect *hitrect)
 {
-    
+    cuno_logf(LOG_INFO, "Connecting to %s port %d", ipv4_chrbuff, CUNO_PORT);
+    struct network_connection *conn = network_connection_create(ipv4_chrbuff, CUNO_PORT);
+    if (!conn) {
+        clear_color = VEC3_RED;
+        return;
+    }
+    clear_color = VEC3_BLUE;
 }
 
 static void entities_init()
@@ -471,8 +480,8 @@ static void entities_init()
 
     struct entity_keyboard_args kbargs = {
         .layout      = KBLAYOUT_NUMPAD,
-        .padding     = 20,
-        .keysize     = 80,
+        .padding     = 25,
+        .keysize     = 135,
         .txtopt      = &default_txtopt,
         .hit_handler = &on_entity_keyboard_hit,
     };
@@ -517,25 +526,28 @@ static void entities_init()
     transf->data.trans.z    = -1;
     comp_system_transform_desync(world_menu.sys_transf, menu_entity_keyboard);
 
-    menu_entity_txt_ipv4    = entity_text_create(&world_menu, &default_txtopt, vec3_create(-500, 200, -2), 50, VEC3_ZERO);
+    menu_entity_txt_ipv4    = entity_text_create(&world_menu, &default_txtopt, vec3_create(-400, 200, -2), 60, VEC3_ZERO);
 
     btnargs = DEFAULT_BTNARGS;
-    btnargs.pos             = vec3_create(-300, 400, -2);
-    btnargs.scale           = vec3_create(180, 45, 0);
+    btnargs.pos             = vec3_create(-300, 400, -1);
+    btnargs.scale           = vec3_create(180, 45, 1);
     btnargs.color           = VEC3_GREEN;
     btnargs.text_scale      = 25;
     btnargs.label           = "Connect";
     btnargs.hit_handler     = &on_connect_btn;
     menu_entity_btn_connect = entity_button_create(&world_menu, &btnargs);
+    cuno_logf(LOG_INFO, "connect: %d", menu_entity_btn_connect);
 
     btnargs = DEFAULT_BTNARGS;
-    btnargs.pos             = vec3_create(0, 400, -2);
-    btnargs.scale           = vec3_create(120, 45, 0);
+    btnargs.pos             = vec3_create(0, 400, -1);
+    btnargs.scale           = vec3_create(120, 45, 1);
     btnargs.color           = VEC3_RED;
     btnargs.text_scale      = 25;
     btnargs.label           = "Host";
     btnargs.hit_handler     = &on_host_btn;
     menu_entity_btn_host    = entity_button_create(&world_menu, &btnargs);
+    cuno_logf(LOG_INFO, "host: %d", menu_entity_btn_host);
+    comp_system_transform_desync_everything(world_menu.sys_transf);
 
     for (i = 0; i < CARD_COLOR_MAX; i++) {
         main_entity_btn_colors[i] = entity_record_activate(&world_main.records);

@@ -10,6 +10,13 @@ android:
 		cd $(BUILD_DIR) && \
 		cmake --build .
 
+posixcli:
+	mkdir -p $(BUILD_DIR)
+	. ./.env && \
+		cmake $(CMAKE_FLAGS) -S . -B $(BUILD_DIR) -DNO_GUI=ON-S  && \
+		cd $(BUILD_DIR) && \
+		cmake --build .
+
 clean:
 	rm -rf $(BUILD_DIR)
 

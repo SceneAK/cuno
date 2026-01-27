@@ -138,7 +138,7 @@ void server_update()
         network_buffer_init(&server_conns[server_conn_len].sendbuff, 1024);
         server_conn_len++;
 
-        if (server_conn_len >= 4)
+        if (server_conn_len >= 2)
             server_start_game();
     }
 

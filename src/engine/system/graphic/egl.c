@@ -223,7 +223,7 @@ struct graphic_vertecies *graphic_vertecies_create(const float *verts, size_t ve
 
     glGenBuffers(1, &vertecies->glvbo);
     glBindBuffer(GL_ARRAY_BUFFER, vertecies->glvbo);
-    glBufferData(GL_ARRAY_BUFFER, VERT_SIZE*(vert_count), verts, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, VERT_SIZE_BYTES*(vert_count), verts, GL_STATIC_DRAW);
     glFlush();
 
     return vertecies;
@@ -245,10 +245,10 @@ void graphic_draw(struct graphic_vertecies *vertecies, struct graphic_texture *t
         glBindBuffer(GL_ARRAY_BUFFER, vertecies->glvbo);
         bound_vbo = vertecies->glvbo;
     
-        glVertexAttribPointer(default_aPos, 3, GL_FLOAT, GL_FALSE, VERT_SIZE, (void*)0);
+        glVertexAttribPointer(default_aPos, 3, GL_FLOAT, GL_FALSE, VERT_SIZE_BYTES, (void*)0);
         glEnableVertexAttribArray(default_aPos);
     
-        glVertexAttribPointer(default_aTexCoord, 2, GL_FLOAT, GL_FALSE, VERT_SIZE, (void*)(3*sizeof(GLfloat)));
+        glVertexAttribPointer(default_aTexCoord, 2, GL_FLOAT, GL_FALSE, VERT_SIZE_BYTES, (void*)(3*sizeof(GLfloat)));
         glEnableVertexAttribArray(default_aTexCoord);
     }
 

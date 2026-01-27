@@ -6,6 +6,12 @@
 #include "engine/system/time.h"
 #include "engine/component.h"
 
+#ifndef NDEBUG
+#define HAS_0_SCALE(transf) (!(transf).data.scale.x || !(transf).data.scale.y || !(transf).data.scale.z)
+#else
+#define HAS_0_SCALE(transf) 0
+#endif
+
 struct component_pool {
     short           sparse[ENTITY_MAX];
     entity_t        dense[ENTITY_MAX];
@@ -412,7 +418,6 @@ static void comp_visual_transform_pool_draw(struct comp_pool_visual *pool, struc
                 continue;
 
             transf = comp_pool_transform_try_get(pool_transf, pool->dense[i]);
-
             graphic_draw(visual->vertecies, 
                          visual->texture, 
                          mat4_mult(*projection, transf ? transf->matrix : MAT4_IDENTITY),
@@ -485,7 +490,11 @@ void comp_system_hitrect_update(struct comp_system_hitrect *system, const vec2 *
 
         if (hitrect->cached_version != transf->matrix_version) {
             hitrect->cached_version = transf->matrix_version;
-            hitrect->cached_matrix_inv = mat4_invert(transf->matrix);
+
+            if (!HAS_0_SCALE(*transf))
+                hitrect->cached_matrix_inv = mat4_invert(transf->matrix);
+            else
+                cuno_logf(LOG_WARN, "COMP_HITRECT: Entity %d matrix is non-invertable due to zero scale component(s)", system->pool.dense[i]);
         }
 
         if (hitrect->type == HITRECT_CAMSPACE)

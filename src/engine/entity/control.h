@@ -67,12 +67,10 @@ static entity_t entity_button_create(struct entity_world *world, const struct en
     struct comp_visual      *vis;
     struct comp_hitrect     *hitrect;
     
-    parent = entity_record_activate(&world->records);
-
     text = entity_text_create(world, args->txtopt, VEC3_ONE, args->text_scale, args->text_color);
     entity_text_change(world, args->txtopt, text, args->label);
 
-    btn   = entity_record_activate(&world->records);
+    btn     = entity_record_activate(&world->records);
     transf  = comp_system_transform_emplace(world->sys_transf, btn);
     vis     = comp_system_visual_emplace(world->sys_vis, btn, PROJ_ORTHO);
     hitrect = comp_system_hitrect_emplace(world->sys_hitrect, btn);
@@ -90,6 +88,7 @@ static entity_t entity_button_create(struct entity_world *world, const struct en
     hitrect->tag         = args->tag;
     hitrect->hit_handler = args->hit_handler;
 
+    parent = entity_record_activate(&world->records);
     transf = comp_system_transform_emplace(world->sys_transf, parent);
     comp_transform_set_default(transf);
     transf->data.trans   = args->pos;

@@ -131,7 +131,7 @@ void client_update()
         printf("Waiting for update... ");
     }
 
-    print_spinner(); usleep(200 * 1000);
+    print_spinner(); usleep(100 * 1000);
 }
 
 void main_client(const char *ipv4addr, short port)
@@ -171,12 +171,16 @@ int main(int argc, char *argv[])
     PRINTF_RESET();
     printf("CUNO Start.\n");
 
-    if (argc == 3)
+    if (argc == 3) {
+        /* if (strcmp(argv[2], "-s") == 0) {
+            main_host(atoi(argv[1]));
+            return 0;
+        } */
         main_client(argv[1], atoi(argv[2]));
-    else if (argc == 2)
+    } else if (argc == 2) {
         main_host(atoi(argv[1]));
-    else
+    } else {
         return 1;
-
+    }
     return 0;
 }

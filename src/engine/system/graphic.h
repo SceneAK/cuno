@@ -2,10 +2,12 @@
 #define GRAPHIC_H
 #include <stddef.h>
 #include "engine/math.h"
+#include "engine/utils.h"
 
 /* Attribs arranged as { x, y, z, tex_x, tex_y } */
-#define VERT_NUM_OF_ELEMENTS 5
-#define VERT_SIZE (VERT_NUM_OF_ELEMENTS*sizeof(float))
+#define VERT_ELEM_COUNT 5
+#define VERT_SIZE_BYTES (VERT_ELEM_COUNT*sizeof(float))
+#define VERT_COUNT(arr) (ARRAY_SIZE(arr)/VERT_ELEM_COUNT)
 
 struct graphic_session;
 struct graphic_texture;
