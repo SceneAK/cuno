@@ -14,7 +14,7 @@ struct graphic_session_info {
     int width, height;
 };
 
-static const rect2D SQUARE_BOUNDS = { 0.0f, 0.0f,   2.0f,  2.0f };
+static const rect2D SQUARE_BOUNDS = { 0.0f, 0.0f, 1.0f,  1.0f };
 static const float SQUARE_VERTS[]       = {
     SQUARE_BOUNDS.x0,  SQUARE_BOUNDS.y0, 0.0f, 0.0f, 0.0f,
     SQUARE_BOUNDS.x0,  SQUARE_BOUNDS.y1, 0.0f, 0.0f, 0.0f,

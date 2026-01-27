@@ -12,7 +12,7 @@
 #define COMPFLAG_SYS_INTERP     1<<4
 
 struct entity_world {
-    struct entity_record             entrec;
+    struct entity_record             records;
     struct comp_system_family       *sys_fam;
     struct comp_system_transform    *sys_transf;
     struct comp_system_visual       *sys_vis;
@@ -27,9 +27,9 @@ static struct graphic_vertecies *_default_square = NULL;
 
 static void entity_world_init(struct entity_world *world)
 {
-    struct comp_system base = { &world->entrec };
+    struct comp_system base = { &world->records };
 
-    entity_record_init(&world->entrec);
+    entity_record_init(&world->records);
 
     base.component_flag = COMPFLAG_SYS_FAMILY;
     world->sys_fam     = comp_system_family_create(base);
@@ -49,7 +49,7 @@ static void entity_world_init(struct entity_world *world)
 
 void entity_world_cleanup(struct entity_world *world, entity_t entity)
 {
-    component_flag_t flags = world->entrec.component_flags[entity];
+    component_flag_t flags = world->records.component_flags[entity];
     if (flags & COMPFLAG_SYS_FAMILY)
         comp_system_family_disown(world->sys_fam, entity);
     if (flags & COMPFLAG_SYS_TRANSFORM)

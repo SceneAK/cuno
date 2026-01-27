@@ -3,9 +3,9 @@
 #include "engine/entity/world.h"
 #include "engine/component.h"
 
-static inline entity_t entity_dot_attatch_new(struct entity_world *ctx, entity_t parent, vec3 color, enum projection_type proj, float scale)
+static inline entity_t entity_dot_attach_new(struct entity_world *ctx, entity_t parent, vec3 color, enum projection_type proj, float scale)
 {
-    entity_t dot = entity_record_activate(&ctx->entrec);
+    entity_t dot = entity_record_activate(&ctx->records);
 
     struct comp_transform *transf;
     struct comp_visual *vis;

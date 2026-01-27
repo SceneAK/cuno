@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "engine/third_party/stb_truetype.h"
 #include "engine/system/graphic.h"
+#include "engine/system/log.h"
+#include "engine/alias.h"
 #include "engine/text.h"
 
 static void convert_to_cps(struct codepoint *cps, stbtt_bakedchar *bakedchr, size_t len)
@@ -38,7 +40,7 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf)
     return font;
 }
 
-float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text)
+float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text, bool try_normalize)
 {
     struct codepoint    cp;
     float               cp_width, cp_height;
@@ -47,6 +49,7 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, float line_
     size_t              verts_per_quad = 6;
     rect2D              dimension, tex;
     float              *vert_data = malloc(strlen(text) * (verts_per_quad*VERT_SIZE));
+    const float         AVG_FONT_WIDTH_APPROX = font.cps['A' - 32].y1 - font.cps['A' - 32].y0;
 
     *vert_count = 0;
 
@@ -69,6 +72,12 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, float line_
         dimension.x1 =  cp.xoff + cp_width + x_head;
         dimension.y1 = -cp.yoff - cp_height + y_head;
 
+        if (try_normalize) {
+            cuno_logf(LOG_INFO, "Dividing by %f from x0=%f,x1=%f,y0=%f,y1=%f ", AVG_FONT_WIDTH_APPROX, dimension.x0, dimension.x1, dimension.y0, dimension.y1);
+            dimension = rect2D_mult(dimension, 1/AVG_FONT_WIDTH_APPROX, 1/AVG_FONT_WIDTH_APPROX);
+            cuno_logf(LOG_INFO, "aftermath: x0=%f,x1=%f,y0=%f,y1=%f ", dimension.x0, dimension.x1, dimension.y0, dimension.y1);
+        }
+
         tex.x0 = cp.x0 / font.width;
         tex.y0 = cp.y0 / font.height;
         tex.x1 = cp.x1 / font.width;
@@ -82,13 +91,13 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, float line_
     return vert_data;
 }
 
-struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text)
+struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text, bool normalize)
 {
     struct graphic_vertecies *graphic_verts;
     size_t                   vert_count;
     float                   *verts;
 
-    verts = create_text_verts(font, &vert_count, line_height, text);
+    verts = create_text_verts(font, &vert_count, line_height, text, normalize);
     graphic_verts = graphic_vertecies_create(verts, vert_count);
     free(verts);
     return graphic_verts;

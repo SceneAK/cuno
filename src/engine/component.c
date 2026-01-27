@@ -462,12 +462,8 @@ int comp_system_hitrect_check_and_clear_state(struct comp_system_hitrect *sys, e
 {
     struct comp_hitrect *hitrect = comp_system_hitrect_get(sys, entity);
 
-    if (NULL)
+    if (!hitrect || !hitrect->state)
         return 0;
-
-    if (!hitrect->state)
-        return 0;
-
     hitrect->state = 0;
     return 1;
 }

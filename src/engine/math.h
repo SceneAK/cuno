@@ -143,7 +143,14 @@ static rect2D rect2D_add(rect2D rect, float x, float y)
     };
     return result;
 }
-
+static rect2D rect2D_mult(rect2D rect, float xscale, float yscale)
+{
+    rect2D result = {
+        rect.x0 * xscale, rect.y0 * yscale,
+        rect.x1 * xscale, rect.y1 * yscale,
+    };
+    return result;
+}
 static const rect2D RECT2D_ZERO = {0, 0, 0, 0};
 
 /* UTILS */
