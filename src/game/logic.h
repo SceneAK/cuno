@@ -99,6 +99,7 @@ int game_state_act_auto(struct game_state *game);
 int game_state_end_turn(struct game_state *game);
 
 const struct card *active_player_find_card(const struct game_state *game, card_id_t card_id);
+static inline int find_player_idx(const struct game_state *game, int player_id);
 
 void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card);
 vec3 card_color_to_rgb(enum card_color color);
@@ -107,5 +108,15 @@ const char *card_color_to_str(enum card_color color);
 size_t log_card(char *buffer, size_t buffer_len, const struct card *card, char hide_unknown);
 size_t log_hand(char *buffer, size_t buffer_len, const struct player *player, char hide_unknowns);
 size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *game, char hide_unkowns);
+
+static inline int find_player_idx(const struct game_state *state, int player_id)
+{
+    int i;
+    for (i = 0; i < state->player_len; i++) {
+        if (state->players[i].id == player_id)
+            return i;
+    }
+    return -1;
+}
 
 #endif

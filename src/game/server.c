@@ -1,5 +1,6 @@
 #include "engine/system/network.h"
 #include "engine/system/log.h"
+#include "engine/system/time.h"
 #include "serialize.h"
 #include "server.h"
 #include "logic.h"
@@ -116,9 +117,10 @@ void server_start(struct network_listener *listener)
 
 void server_start_game()
 {
-    const int INITIAL_DEAL = 7;
+    const int INITIAL_DEAL = 5;
     int i;
 
+    srand(get_monotonic_time());
     game_state_start(&server_state, server_conn_len, INITIAL_DEAL);
     for (i = 0; i < server_conn_len; i++)
         server_conns[i].player_id = server_state.players[i].id;

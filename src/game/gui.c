@@ -13,6 +13,7 @@
 
 #include "engine/game.h"
 #include "logic.h"
+#include "server.h"
 #include "serialize.h"
 
 #define ORTHO_WIDTH ortho_height * aspect_ratio
@@ -58,6 +59,8 @@ static const float                      CUNO_PORT = 7777;
 static struct game_state                game_state_alt;
 static struct game_state                game_state_mut;
 static const struct game_state         *game_state = &game_state_mut;
+static int                              this_player_id;
+static int                              this_player_idx;
 
 static struct graphic_session          *session;
 static struct graphic_session_info      session_info;
@@ -65,6 +68,8 @@ static struct graphic_session_info      session_info;
 static struct baked_font                font_spec_default;
 static struct graphic_texture          *font_tex;
 static struct graphic_vertecies        *card_vertecies;
+static struct network_connection       *server_conn;
+static struct network_buffer            sendbuff, recvbuff;
 
 static float                            aspect_ratio;
 static float                            ortho_height;
@@ -311,6 +316,47 @@ void entity_discards_discard(entity_t entity_card)
     comp_system_hitrect_get(world_main.sys_hitrect, entity_card)->active = 1;
 }
 
+static entity_t entity_player_create(const struct player *player)
+{
+    struct comp_transform *transf;
+    entity_t               entity_player;
+
+    entity_player = entity_record_activate(&world_main.records);
+    transf = comp_system_transform_emplace(world_main.sys_transf, entity_player);
+    comp_transform_set_default(transf);
+    entity_player_add_cards(entity_player, player->hand.elems, player->hand.len);
+
+    return entity_player;
+}
+
+void scene_init()
+{
+    struct comp_transform   *transf;
+    const vec3               SEAT_POS[]   = {vec3_create(-4.2f, -5.5, -10), vec3_create(-4.2f, 5.5, -10)};
+    const float              SEAT_SCALE[] = {0.38, 0.28};
+
+    entity_t entity_card;
+    int seat_idx;
+    int i;
+
+
+    entity_card = entity_card_create(&game_state->top_card);
+    entity_list_append(&main_entity_discard, &entity_card, 1);
+    comp_system_interpolator_change(world_main.sys_interp, entity_card, DISCARD_PILE_TRANSFORM);
+
+    for (i = 0; i < game_state->player_len; i++) {
+        seat_idx = (this_player_idx + i) % game_state->player_len;
+        cuno_logf(LOG_INFO, "i=%d, seat_idx=%d", i, seat_idx);
+
+        main_entity_players[i]  = entity_player_create(game_state->players + i);
+        transf                  = comp_system_transform_get(world_main.sys_transf, main_entity_players[i]);
+        transf->data.trans      = SEAT_POS[seat_idx];
+        transf->data.rot        = vec3_create(-PI/8, 0, 0);
+        transf->data.scale      = vec3_all(SEAT_SCALE[seat_idx]);
+        comp_system_transform_desync(world_main.sys_transf, main_entity_players[i]);
+    }
+}
+
 static void scene_remove_player_cards(const struct player *player, entity_t entity_player)
 {
     entity_t                        entity_card,
@@ -356,16 +402,13 @@ static void scene_add_player_cards(const struct player *player, entity_t entity_
     entity_player_add_cards(entity_player, player->hand.elems + entity_card_len, player->hand.len - entity_card_len); 
 }
 
-static void scene_mirror_turn()
+static void scene_mirror_curr_turn()
 {
-    const struct player            *active_player = game_state->players + game_state->active_player_index;
-    entity_t                        entity_player = main_entity_players[game_state->active_player_index];
-
-
-    if (game_state->act == ACT_PLAY)
-        scene_remove_player_cards(active_player, entity_player);
-    else if (game_state->act == ACT_DRAW)
-        scene_add_player_cards(active_player, entity_player);
+    int i;
+    for (i = 0; i < game_state->player_len; i++) {
+        scene_remove_player_cards(game_state->players + i, main_entity_players[i]);
+        scene_add_player_cards(game_state->players + i, main_entity_players[i]);
+    }
 }
 
 static int resources_init(struct graphic_session *created_session)
@@ -396,19 +439,6 @@ static int resources_init(struct graphic_session *created_session)
     return 1;
 }
 
-static entity_t entity_player_create(const struct player *player)
-{
-    struct comp_transform *transf;
-    entity_t               entity_player;
-
-    entity_player = entity_record_activate(&world_main.records);
-    transf = comp_system_transform_emplace(world_main.sys_transf, entity_player);
-    comp_transform_set_default(transf);
-    entity_player_add_cards(entity_player, player->hand.elems, player->hand.len);
-
-    return entity_player;
-}
-
 
 static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
 {
@@ -430,7 +460,6 @@ static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
     }
 
     if (digits >= 3) {
-        cuno_logf(LOG_INFO, "dot_idx:%d", octet_idx);
         octet_idx += snprintf(ipv4_chrbuff + octet_idx, sizeof(ipv4_chrbuff) - octet_idx, 
                         octet_count < 4 ? "%d." : "%d", atoi(ipv4_chrbuff + octet_idx));
 
@@ -438,8 +467,6 @@ static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
         digits = 0;
     }
     entity_text_change(&world_menu, &default_txtopt, menu_entity_txt_ipv4, ipv4_chrbuff);
-
-    cuno_logf(LOG_INFO, "octets: %d, digits: %d, octet_idx: %d", octet_count, digits, octet_idx);
 }
 
 static void on_host_btn(entity_t e, struct comp_hitrect *hitrect)
@@ -448,127 +475,12 @@ static void on_host_btn(entity_t e, struct comp_hitrect *hitrect)
 
 static void on_connect_btn(entity_t e, struct comp_hitrect *hitrect)
 {
-    cuno_logf(LOG_INFO, "Connecting to %s port %d", ipv4_chrbuff, CUNO_PORT);
-    struct network_connection *conn = network_connection_create(ipv4_chrbuff, CUNO_PORT);
-    if (!conn) {
+    server_conn = network_connection_create(ipv4_chrbuff, CUNO_PORT);
+    if (!server_conn) {
         clear_color = VEC3_RED;
         return;
     }
-    clear_color = VEC3_BLUE;
-}
-
-static void entities_init()
-{
-    struct comp_transform       *transf;
-    struct comp_visual          *visual;
-    struct comp_hitrect         *hitrect;
-    struct comp_interpolator    *interp;
-
-    struct entity_button_args btnargs;
-    const struct entity_button_args DEFAULT_BTNARGS =  {
-        .txtopt      = &default_txtopt,
-        .text_color  = VEC3_ZERO,
-        .text_scale  = 50,
-        .tag         = 0,
-
-        .label       = NULL,
-        .pos         = VEC3_ZERO,
-        .scale       = VEC3_ONE,
-        .color       = VEC3_RED,
-        .hit_handler = NULL,
-    };
-
-    struct entity_keyboard_args kbargs = {
-        .layout      = KBLAYOUT_NUMPAD,
-        .padding     = 25,
-        .keysize     = 135,
-        .txtopt      = &default_txtopt,
-        .hit_handler = &on_entity_keyboard_hit,
-    };
-
-    entity_t temp;
-    int i;
-
-    entity_list_init(&main_entity_discard, 1);
-    play_list_init(&staged_plays, 1);
-
-    temp = entity_card_create(&game_state->top_card);
-    entity_list_append(&main_entity_discard, &temp, 1);
-    comp_system_interpolator_change(world_main.sys_interp, temp, DISCARD_PILE_TRANSFORM);
-
-    main_entity_players[0]  = entity_player_create(game_state->players + 0);
-    transf                  = comp_system_transform_get(world_main.sys_transf, main_entity_players[0]);
-    transf->data.trans      = vec3_create(-4.2f, -5.5, -10);
-    transf->data.rot        = vec3_create(-PI/8, 0, 0);
-    transf->data.scale      = vec3_create(0.4, 0.4, 0.4); 
-    comp_system_transform_desync(world_main.sys_transf, main_entity_players[0]);
-
-    main_entity_players[1]  = entity_player_create(game_state->players + 1);
-    transf                  = comp_system_transform_get(world_main.sys_transf, main_entity_players[1]);
-    transf->data.trans      = vec3_create(-4.2f, 5.5, -10);
-    transf->data.rot        = vec3_create(PI/8, 0, 0); 
-    transf->data.scale      = vec3_create(0.3, 0.3, 0.3);
-    comp_system_transform_desync(world_main.sys_transf, main_entity_players[1]);
-
-    btnargs = DEFAULT_BTNARGS;
-    btnargs.pos             = vec3_create(-150, 400, -2);
-    btnargs.scale           = vec3_create(110, 78, 1);
-    btnargs.color           = vec3_create(1, 0.321568627, 0.760784314);
-    btnargs.text_scale      = 60;
-    btnargs.label           = "Draw";
-    main_entity_btn_draw    = entity_button_create(&world_main, &btnargs);
-
-    main_entity_txt_debug   = entity_text_create(&world_main, &default_txtopt, vec3_create(-500, 200, -1), 50, VEC3_ZERO);
-
-    menu_entity_keyboard    = entity_keyboard_create(&world_menu, &kbargs);
-    transf                  = comp_system_transform_get(world_menu.sys_transf, menu_entity_keyboard);
-    comp_transform_set_default(transf);
-    transf->data.trans.z    = -1;
-    comp_system_transform_desync(world_menu.sys_transf, menu_entity_keyboard);
-
-    menu_entity_txt_ipv4    = entity_text_create(&world_menu, &default_txtopt, vec3_create(-400, 200, -2), 60, VEC3_ZERO);
-
-    btnargs = DEFAULT_BTNARGS;
-    btnargs.pos             = vec3_create(-300, 400, -1);
-    btnargs.scale           = vec3_create(180, 45, 1);
-    btnargs.color           = VEC3_GREEN;
-    btnargs.text_scale      = 25;
-    btnargs.label           = "Connect";
-    btnargs.hit_handler     = &on_connect_btn;
-    menu_entity_btn_connect = entity_button_create(&world_menu, &btnargs);
-    cuno_logf(LOG_INFO, "connect: %d", menu_entity_btn_connect);
-
-    btnargs = DEFAULT_BTNARGS;
-    btnargs.pos             = vec3_create(0, 400, -1);
-    btnargs.scale           = vec3_create(120, 45, 1);
-    btnargs.color           = VEC3_RED;
-    btnargs.text_scale      = 25;
-    btnargs.label           = "Host";
-    btnargs.hit_handler     = &on_host_btn;
-    menu_entity_btn_host    = entity_button_create(&world_menu, &btnargs);
-    cuno_logf(LOG_INFO, "host: %d", menu_entity_btn_host);
-    comp_system_transform_desync_everything(world_menu.sys_transf);
-
-    for (i = 0; i < CARD_COLOR_MAX; i++) {
-        main_entity_btn_colors[i] = entity_record_activate(&world_main.records);
-        transf                  = comp_system_transform_emplace(world_main.sys_transf, main_entity_btn_colors[i]);
-        visual                  = comp_system_visual_emplace(world_main.sys_vis, main_entity_btn_colors[i], PROJ_PERSP);
-        hitrect                 = comp_system_hitrect_emplace(world_main.sys_hitrect, main_entity_btn_colors[i]);
-        interp                  = comp_system_interpolator_emplace(world_main.sys_interp, main_entity_btn_colors[i]);
-        comp_hitrect_set_default(hitrect);
-        comp_transform_set_default(transf);
-        comp_visual_set_default(visual);
-        comp_interpolator_set_default(interp);
-        visual->vertecies       = card_vertecies;
-        visual->color           = card_color_to_rgb((enum card_color)i);
-        visual->draw_pass       = DRAW_PASS_NONE;
-        hitrect->rect           = CARD_BOUNDS;
-        hitrect->type           = HITRECT_CAMSPACE;
-        hitrect->active         = 0;
-        hitrect->hitmask        = HITMASK_MOUSE_DOWN;
-        interp->opt.ease_in     = 0.1f;
-        interp->opt.ease_out    = 0.2f;
-    }
+    active_world = &world_main;
 }
 
 static void enable_popup_play_arg_color(entity_t entity_card)
@@ -652,7 +564,7 @@ static void staged_plays_try_play(entity_t entity_card)
         }
     }
     global_ui_state = UI_STATE_MAKE_ACT;
- 
+ cuno_logf(LOG_INFO, "made act");
     if (!staged_plays.len)
         game_state_copy_into(&game_state_alt, game_state);
 
@@ -661,7 +573,7 @@ static void staged_plays_try_play(entity_t entity_card)
 
     game_state_act_play(&game_state_alt, curr_play);
     play_list_append(&staged_plays, &curr_play, 1);
-
+ cuno_logf(LOG_INFO, "appended");
     entity_card_start_raise(entity_card);
 }
 static void staged_plays_try_unplay(entity_t entity_card)
@@ -696,7 +608,7 @@ static void staged_plays_clear()
     size_t                          i;
 
     view        = comp_system_family_view(world_main.sys_fam);
-    entity_card = view.first_child_map[main_entity_players[0]];
+    entity_card = view.first_child_map[main_entity_players[this_player_idx]];
 
     for (;!entity_is_invalid(entity_card); entity_card = view.sibling_map[entity_card]) {
         for (i = 0; i < staged_plays.len; i++) {
@@ -710,11 +622,10 @@ static void staged_plays_clear()
         play_list_remove_swp(&staged_plays, &i, 1);
     }
 }
-static void end_turn()
+static void gui_apply_turn()
 {
     staged_plays_clear();
-    scene_mirror_turn();
-    game_state_end_turn(&game_state_mut);
+    scene_mirror_curr_turn();
     
     log_game_state(gamelog_charbuff, sizeof(gamelog_charbuff), game_state, 0);
     entity_text_change(&world_main, &default_txtopt, main_entity_txt_debug, gamelog_charbuff);
@@ -755,6 +666,8 @@ static void on_card_hit(entity_t entity_card)
 {
     int i;
 
+    cuno_logf(LOG_INFO, "enter on card hit");
+
     for (i = 0; i < staged_plays.len; i++) {
         if (staged_plays.elems[i].card_id == card_ids[entity_card])
             break;
@@ -766,15 +679,44 @@ static void on_card_hit(entity_t entity_card)
     }
 
 }
+
+static void send_server_act(const char *actcmd)
+{
+    struct network_header hdr = {
+        .version = NETMSG_VER,
+        .type = MSG_ACT,
+        .len = strlen(actcmd),
+    };
+    network_buffer_make_space(&sendbuff, hdr.len + NETHDR_SERIALIZED_SIZE);
+    network_header_serialize(&sendbuff.tail, &hdr);
+    network_pack_str(&sendbuff.tail, actcmd);
+}
+
+static void send_server_plays()
+{
+    char buff[64];
+    int buff_len = 0;
+    int i;
+
+    for (i = 0; i < staged_plays.len; i++)
+        buff_len += snprintf(buff + buff_len, ARRAY_SIZE(buff) - buff_len, "p%d", staged_plays.elems[i].card_id);
+
+    send_server_act(buff);
+}
+
+static void send_server_draw()
+{
+    send_server_act("d");
+}
+
 static void on_state_make_act()
 {
     struct comp_system_family_view  view;
     entity_t                        top_card,
                                     entity_card;
     int                             i;
-
     view        = comp_system_family_view(world_main.sys_fam);
-    entity_card = view.first_child_map[main_entity_players[0]];
+    entity_card = view.first_child_map[main_entity_players[this_player_idx]];
 
     while (!entity_is_invalid(entity_card)) {
         if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, entity_card))
@@ -786,22 +728,19 @@ static void on_state_make_act()
         on_card_hit(entity_card);
 
     top_card = main_entity_discard.elems[main_entity_discard.len-1];
-    if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, top_card) && staged_plays.len > 0) {
-        game_state_copy_into(&game_state_mut, &game_state_alt);
-        end_turn();
-        return;
-    }
 
-    if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, main_entity_btn_draw)) {
-        game_state_act_draw(&game_state_mut);
-        end_turn();
-        return;
-    }
+    if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, top_card) && staged_plays.len > 0)
+        send_server_plays();
+}
+
+static void on_btn_draw(entity_t entity, struct comp_hitrect *hitrect)
+{
+    send_server_draw();
 }
 
 static void on_hitrect_state_update()
 {
-    if (game_state->active_player_index != 0)
+    if (game_state->active_player_index != this_player_idx)
         return;
 
     if (global_ui_state == UI_STATE_SELECT_ARG) {
@@ -823,7 +762,7 @@ static void render()
 }
 
 static double auto_act_time = -1;
-void player1_update()
+void player_auto()
 {
     const double ACT_DELAY = 1.4;
 
@@ -835,11 +774,107 @@ void player1_update()
         auto_act_time = get_monotonic_time() + ACT_DELAY;
     else if (auto_act_time <= get_monotonic_time()) {
         game_state_act_auto(&game_state_mut);
-        end_turn();
+        gui_apply_turn();
         clear_color.x = 1;
         auto_act_time = -1;
     }
 }
+
+static void entities_init()
+{
+    struct comp_transform       *transf;
+    struct comp_visual          *visual;
+    struct comp_hitrect         *hitrect;
+    struct comp_interpolator    *interp;
+
+    struct entity_button_args btnargs;
+    const struct entity_button_args DEFAULT_BTNARGS =  {
+        .txtopt      = &default_txtopt,
+        .text_color  = VEC3_ZERO,
+        .text_scale  = 50,
+        .tag         = 0,
+
+        .label       = NULL,
+        .pos         = VEC3_ZERO,
+        .scale       = VEC3_ONE,
+        .color       = VEC3_RED,
+        .hit_handler = NULL,
+    };
+
+    struct entity_keyboard_args kbargs = {
+        .layout      = KBLAYOUT_NUMPAD,
+        .padding     = 25,
+        .keysize     = 135,
+        .txtopt      = &default_txtopt,
+        .hit_handler = &on_entity_keyboard_hit,
+    };
+
+    entity_t temp;
+    int i;
+
+    entity_list_init(&main_entity_discard, 1);
+    play_list_init(&staged_plays, 1);
+
+    btnargs = DEFAULT_BTNARGS;
+    btnargs.pos             = vec3_create(-150, -500, -2);
+    btnargs.scale           = vec3_create(140, 110, 1);
+    btnargs.color           = vec3_create(1, 0.321568627, 0.760784314);
+    btnargs.text_scale      = 40;
+    btnargs.label           = "Draw";
+    btnargs.hit_handler     = &on_btn_draw;
+    main_entity_btn_draw    = entity_button_create(&world_main, &btnargs);
+
+    main_entity_txt_debug   = entity_text_create(&world_main, &default_txtopt, vec3_create(-420, 200, -1), 15, VEC3_ZERO);
+
+    menu_entity_keyboard    = entity_keyboard_create(&world_menu, &kbargs);
+    transf                  = comp_system_transform_get(world_menu.sys_transf, menu_entity_keyboard);
+    comp_transform_set_default(transf);
+    transf->data.trans.z    = -1;
+    comp_system_transform_desync(world_menu.sys_transf, menu_entity_keyboard);
+
+    menu_entity_txt_ipv4    = entity_text_create(&world_menu, &default_txtopt, vec3_create(-400, 200, -2), 60, VEC3_ZERO);
+
+    btnargs = DEFAULT_BTNARGS;
+    btnargs.pos             = vec3_create(-300, 400, -1);
+    btnargs.scale           = vec3_create(180, 45, 1);
+    btnargs.color           = VEC3_GREEN;
+    btnargs.text_scale      = 25;
+    btnargs.label           = "Connect";
+    btnargs.hit_handler     = &on_connect_btn;
+    menu_entity_btn_connect = entity_button_create(&world_menu, &btnargs);
+
+    btnargs = DEFAULT_BTNARGS;
+    btnargs.pos             = vec3_create(0, 400, -1);
+    btnargs.scale           = vec3_create(120, 45, 1);
+    btnargs.color           = VEC3_RED;
+    btnargs.text_scale      = 25;
+    btnargs.label           = "Host";
+    btnargs.hit_handler     = &on_host_btn;
+    menu_entity_btn_host    = entity_button_create(&world_menu, &btnargs);
+    comp_system_transform_desync_everything(world_menu.sys_transf);
+
+    for (i = 0; i < CARD_COLOR_MAX; i++) {
+        main_entity_btn_colors[i] = entity_record_activate(&world_main.records);
+        transf                  = comp_system_transform_emplace(world_main.sys_transf, main_entity_btn_colors[i]);
+        visual                  = comp_system_visual_emplace(world_main.sys_vis, main_entity_btn_colors[i], PROJ_PERSP);
+        hitrect                 = comp_system_hitrect_emplace(world_main.sys_hitrect, main_entity_btn_colors[i]);
+        interp                  = comp_system_interpolator_emplace(world_main.sys_interp, main_entity_btn_colors[i]);
+        comp_hitrect_set_default(hitrect);
+        comp_transform_set_default(transf);
+        comp_visual_set_default(visual);
+        comp_interpolator_set_default(interp);
+        visual->vertecies       = card_vertecies;
+        visual->color           = card_color_to_rgb((enum card_color)i);
+        visual->draw_pass       = DRAW_PASS_NONE;
+        hitrect->rect           = CARD_BOUNDS;
+        hitrect->type           = HITRECT_CAMSPACE;
+        hitrect->active         = 0;
+        hitrect->hitmask        = HITMASK_MOUSE_DOWN;
+        interp->opt.ease_in     = 0.1f;
+        interp->opt.ease_out    = 0.2f;
+    }
+}
+
 
 /***** GAME.H EVENTS *****/
 int game_init(struct graphic_session *created_session)
@@ -855,8 +890,8 @@ int game_init(struct graphic_session *created_session)
     if (!resources_init(created_session))
         return -1;
 
-    game_state_init(&game_state_mut);
-    game_state_start(&game_state_mut, PLAYER_AMOUNT, DEAL_PER_PLAYER);
+    network_buffer_init(&sendbuff, 128);
+    network_buffer_init(&recvbuff, 1024);
 
     default_txtopt.font_tex     = font_tex,
     default_txtopt.font_spec    = &font_spec_default;
@@ -874,6 +909,41 @@ int game_init(struct graphic_session *created_session)
     return 0;
 }
 
+void network_update()
+{
+    struct network_header header;
+    static char started = 0;
+
+    network_connection_sendrecv_nb(server_conn, &sendbuff, &recvbuff);
+    while (NETWORK_BUFFER_LEN(recvbuff)) {
+        if (!network_buffer_peek_hdrmsg(&recvbuff))
+            return;
+
+        network_header_deserialize(&header, &recvbuff.head);
+
+        switch (header.type) {
+            case MSG_GMSTATE:
+                game_state_deserialize(&game_state_mut, &recvbuff.head);
+                if (started) {
+                    gui_apply_turn();
+                    cuno_logf(LOG_INFO, "APPLIED TURN");
+                } else {
+                    started = 1;
+                    this_player_idx = find_player_idx(game_state, this_player_id);
+                    scene_init();
+                    cuno_logf(LOG_INFO, "SCENE_INIT");
+                }
+                return;
+            case MSG_GMSTART:
+                this_player_id = network_unpack_u8(&recvbuff.head);
+                return;
+            default:
+                cuno_logf(LOG_ERR, "Unhandled MSG type %d\n", header.type);
+                return;
+        }
+    }
+}
+
 void game_update()
 {
     if (!session)
@@ -882,8 +952,9 @@ void game_update()
     comp_system_transform_sync_matrices(active_world->sys_transf);
     comp_system_interpolator_update(active_world->sys_interp);
 
-    if (active_world == &world_main) /* should prob be its own comp */
-        player1_update();
+    network_update();
+    /* if (active_world == &world_main)
+        player_auto(); */
 
     render();
 }
@@ -897,7 +968,7 @@ void game_mouse_event(struct mouse_event event)
                               event.type == MOUSE_UP   ? HITMASK_MOUSE_UP   :
                               event.type == MOUSE_HOLD ? HITMASK_MOUSE_HOLD :
                               HITMASK_MOUSE_HOVER;
- 
+
     comp_system_hitrect_update(active_world->sys_hitrect, &mouse_orthospace, &mouse_camspace_ray, mask); 
     on_hitrect_state_update();
     comp_system_hitrect_clear_states(active_world->sys_hitrect); /* Forces checks every frame, wastefully */
