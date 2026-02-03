@@ -36,10 +36,10 @@ add_custom_command(
     COMMENT "Signing APK"
     VERBATIM
 )
-add_custom_target(cunoapk ALL DEPENDS SIGNED)
 #add_custom_command(
 #    TARGET cunoapk
 #    COMMAND zipalign -v -p 4 signed.apk final-aligned.apk
 #    DEPENDS signed.apk
 #    COMMENT "Aligning APK"
 #)
+add_custom_target(cunoapk ALL DEPENDS SIGNED)

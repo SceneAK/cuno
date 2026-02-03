@@ -1,5 +1,6 @@
 #ifndef SERVER_H
 #define SERVER_H
+#include "logic.h"
 #include "engine/system/network.h"
 
 #define NETMSG_VER 0
@@ -7,9 +8,9 @@
 
 enum message_type {
     MSG_UNKNOWN = -1,
-    MSG_GMSTATE,
-    MSG_GMSTART,
-    MSG_ACT,
+    MSG_GM_START,
+    MSG_GM_STATE,
+    MSG_GM_ACT,
 };
 
 struct player_connection {
@@ -19,12 +20,12 @@ struct player_connection {
     void (*recvmsg)(short type, const void *data);
 };
 
-void server_start(struct network_listener *listener);
+void server_init(int port, int max_players);
 void server_start_game();
 void server_update();
 
 int server_register_local(void (*recvmsg)(short type, const void *data));
-void server_process_act(const char *input);
+int server_handle_act(struct act act);
 
 int server_is_idling(); /* Hacky + spaghetti */
 

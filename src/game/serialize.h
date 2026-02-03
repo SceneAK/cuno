@@ -101,18 +101,47 @@ static inline size_t game_state_serialize(u8 **cursor, const struct game_state *
 static inline void game_state_deserialize(struct game_state *state, u8 **cursor)
 {
     int i;
-printf("unpacking regular \n");
+
     state->turn       = network_unpack_u8(cursor);
     state->turn_dir   = (s8)network_unpack_u8(cursor);
     state->ended      = network_unpack_u8(cursor);
     state->skip_pool  = network_unpack_u8(cursor);
-    state->batsu_pool = network_unpack_u16(cursor);printf("deser cafd\n");
+    state->batsu_pool = network_unpack_u16(cursor);
     card_deserialize(&state->top_card, cursor);
-printf("deser player\n");
+
     state->player_len = network_unpack_u8(cursor);
     for (i = 0; i < state->player_len; i++)
         player_deserialize(state->players + i, cursor);
     state->active_player_index = network_unpack_u8(cursor);
 }
 
+static inline size_t act_serialize(u8 **cursor, struct act act)
+{
+    size_t total = 0;
+    total += network_pack_u8(cursor, act.type);
+    switch (act.type) {
+        case ACT_PLAY:
+            total += network_pack_u16(cursor, act.args.play.card_id);
+            total += network_pack_u8(cursor, act.args.play.color);
+            break;
+        default:
+            break;
+    }
+    return total;
+}
+
+static inline struct act act_deserialize(u8 **cursor)
+{
+    struct act act;
+    act.type = network_unpack_u8(cursor);
+    switch (act.type) {
+        case ACT_PLAY:
+            act.args.play.card_id = network_unpack_u16(cursor);
+            act.args.play.color   = network_unpack_u8(cursor);
+            break;
+        default:
+            break;
+    }
+    return act;
+}
 #endif

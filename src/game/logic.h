@@ -29,18 +29,6 @@ enum card_type {
     CARD_SWAP,
     CARD_TYPE_MAX,
 };
-enum play_arg_type {
-    PLAY_ARG_NONE,
-    PLAY_ARG_COLOR,
-    PLAY_ARG_PLAYER,
-};
-struct play_arg {
-    enum play_arg_type  type;
-    union {
-        enum card_color color;
-        int             player_idx;
-    } u;
-};
 typedef unsigned short card_id_t;
 struct card {
     card_id_t           id;
@@ -58,10 +46,18 @@ enum act_type {
     ACT_NONE,
     ACT_PLAY,
     ACT_DRAW,
+    ACT_END_TURN,
 };
-struct act_play {
+struct act_args_play {
     card_id_t           card_id;
-    struct play_arg     args[PLAY_ARG_MAX];
+    enum card_color     color;
+};
+union act_args {
+    struct act_args_play play;
+};
+struct act {
+    enum act_type       type;
+    union act_args      args;
 };
 struct game_state {
     struct player       players[PLAYER_MAX];
@@ -72,7 +68,7 @@ struct game_state {
     int                 turn;
     int                 ended;
     unsigned int        active_player_index;
-    enum act_type       act;
+    enum act_type       curr_act;
 
     struct card         top_card;
     int                 turn_dir;
@@ -80,9 +76,6 @@ struct game_state {
     unsigned int        batsu_pool;
 };
 
-static const struct play_arg PLAY_ARG_ZERO = {0};
-static const struct play_arg PLAY_ARGS_ZERO[PLAY_ARG_MAX] = {0};
-static const struct act_play ACT_PLAY_ZERO = {0};
 
 void game_state_init(struct game_state *game);
 void game_state_deinit(struct game_state *game);
@@ -91,17 +84,15 @@ void game_state_start(struct game_state *game, int player_len, int deal);
 void game_state_for_player(struct game_state *game, int player_id);
 
 const struct card *game_state_get_card(const struct game_state *game, card_id_t card_id);
-int game_state_can_act_draw(const struct game_state *game);
-int game_state_can_act_play(const struct game_state *game, struct act_play play);
-int game_state_act_draw(struct game_state *game);
-int game_state_act_play(struct game_state *game, struct act_play play);
-int game_state_act_auto(struct game_state *game);
-int game_state_end_turn(struct game_state *game);
+int game_state_can_act(const struct game_state *game, struct act act);
+int game_state_act(struct game_state *game, struct act act);
+
+int act_auto(const struct game_state *game, struct act *act);
 
 const struct card *active_player_find_card(const struct game_state *game, card_id_t card_id);
 static inline int find_player_idx(const struct game_state *game, int player_id);
 
-void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card);
+int card_needs_color_arg(const struct card *card);
 vec3 card_color_to_rgb(enum card_color color);
 const char *card_type_to_str(enum card_type card_type);
 const char *card_color_to_str(enum card_color color);

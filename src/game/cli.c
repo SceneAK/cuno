@@ -29,11 +29,11 @@ void client_handle_local_recv(short type, const void *data)
 {
     switch(type)
     {
-        case MSG_GMSTATE:
+        case MSG_GM_STATE:
             game_state_copy_into(&client_state, data);
             client_youvegotmail = 1;
             break;
-        case MSG_GMSTART:
+        case MSG_GM_START:
             client_playerid = *(unsigned char *)data;
             break;
         default:
@@ -62,17 +62,15 @@ void client_process_recvbuff()
     network_header_deserialize(&header, &client_recvbuff.head);
 
     switch (header.type) {
-        case MSG_GMSTATE:
-
-            game_state_deserialize(&client_state, &client_recvbuff.head);
-
-            client_youvegotmail = 1;
-            return;
-        case MSG_GMSTART:
+        case MSG_GM_START:
             client_playerid = network_unpack_u8(&client_recvbuff.head);
             return;
+        case MSG_GM_STATE:
+            game_state_deserialize(&client_state, &client_recvbuff.head);
+            client_youvegotmail = 1;
+            return;
         default:
-            printf("Unhandled MSG type %d\n", header.type);
+            printf("Client: unhandled MSG type %d\n", header.type);
             return;
     }
 }
@@ -82,33 +80,51 @@ void client_update_state()
         client_process_recvbuff();
 }
 
+struct act get_act()
+{
+    struct act act;
+    char input[16];
+
+    printf("===============================================\n"
+            "draw: d<CR>, play: p[card_id]<CR>, end turn: e<CR>\n"
+           ">> ");
+    scanf(" %[^\n]s", input);
+
+    switch (input[0]) {
+        case 'd':
+            act.type = ACT_DRAW;
+            break;
+        case 'p':
+            act.args.play.card_id = atoi(input+1);
+            act.type = ACT_PLAY;
+            break;
+        case 'e':
+            act.type = ACT_END_TURN;
+            break;
+    }
+
+    return act;
+}
+
 void client_act()
 {
     struct network_header header = {
         .version = NETMSG_VER,
-        .type = MSG_ACT,
+        .type = MSG_GM_ACT,
         .len = 0
     };
-    char input[16];
-    int temp;
-
-    printf("===============================================\n"
-           "draw: d<enter>, play: p[card_id]<enter>\n"
-           ">> ");
-    scanf(" %c", input);
-
-    header.len = 1;
-    if (input[0] == 'p') {
-        scanf(" %d", &temp);
-        header.len += sprintf((char *)(input+1), "%d", temp);
-    }
+    struct act act;
+retry:
+    act = get_act();
 
     if (client_serverconn) {
+        header.len = act_serialize(NULL, act);
+
         network_buffer_make_space(&client_sendbuff, header.len + NETHDR_SERIALIZED_SIZE);
         network_header_serialize(&client_sendbuff.tail, &header);
-        network_pack_str(&client_sendbuff.tail, input);
+        act_serialize(&client_sendbuff.tail, act);
     } else {
-        server_process_act(input);
+        if (server_handle_act(act) != 0) goto retry;
     }
 }
 
@@ -153,17 +169,14 @@ void main_client(const char *ipv4addr, short port)
 
 void main_host(short port)
 {
-    struct network_listener *listener = network_listener_create(port, 4);
-
-    server_start(listener); printf("Server listening on port %d...\n", port);
+    const int MAX_PLAYER = 3;
+    server_init(port, MAX_PLAYER); printf("Server listening on port %d...\n", port);
     client_start(NULL);
     while (1) {
         server_update();
         if (server_is_idling())
             client_update();
     }
-
-    network_listener_destroy(listener);
 }
 
 int main(int argc, char *argv[])

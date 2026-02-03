@@ -84,20 +84,17 @@ static void append_player_rand_cards(struct game_state *state, int player_index,
         card_random(card + i, state->card_id_last++);
 }
 
-void card_get_arg_type_specs(enum play_arg_type arg_specs[PLAY_ARG_MAX], const struct card *card)
+int card_needs_color_arg(const struct card *card)
 {
-    memset(arg_specs, 0, sizeof(enum play_arg_type) * PLAY_ARG_MAX);
-    if (card->color == CARD_COLOR_BLACK)
-        arg_specs[0] = PLAY_ARG_COLOR;
-    if (card->type == CARD_SWAP)
-        arg_specs[1] = PLAY_ARG_PLAYER;
+    return card->color == CARD_COLOR_BLACK;
 }
-static int play_card_effect(struct game_state *game, struct card *card, const struct play_arg args[PLAY_ARG_MAX])
+
+static int play_card_effect(struct game_state *game, struct card *card, enum card_color color_arg)
 {
     struct card_list temp;
 
-    if (card->color == CARD_COLOR_BLACK && args[0].type == PLAY_ARG_COLOR)
-        card->color = args[0].u.color;
+    if (card_needs_color_arg(card))
+        card->color = color_arg;
 
     switch (card->type) {
         case CARD_REVERSE:
@@ -114,14 +111,6 @@ static int play_card_effect(struct game_state *game, struct card *card, const st
 
         case CARD_PLUS4:
             game->batsu_pool += 4;
-            break;
-
-        case CARD_SWAP:
-            if (args[1].type != PLAY_ARG_PLAYER)
-                break;
-            temp = game->players[game->active_player_index].hand;
-            game->players[game->active_player_index].hand = game->players[args[1].u.player_idx].hand;
-            game->players[args[1].u.player_idx].hand = temp;
             break;
 
         default:
@@ -157,7 +146,7 @@ void game_state_start(struct game_state *game, int player_len, int deal)
     do
         card_random(&game->top_card, game->card_id_last++); 
     while (game->top_card.type == CARD_PICK_COLOR);
-    play_card_effect(game, &game->top_card, PLAY_ARGS_ZERO);
+    play_card_effect(game, &game->top_card, CARD_COLOR_RED);
 }
 
 void game_state_deinit(struct game_state *game)
@@ -202,11 +191,12 @@ void game_state_for_player(struct game_state *state, int player_id)
 }
 
 /* ACTS */
-int game_state_can_act_draw(const struct game_state *game)
+static int game_state_can_act_draw(const struct game_state *game)
 {
-    return !game->ended && !game->act;
+    return !game->ended && !game->curr_act;
 }
-int game_state_act_draw(struct game_state *game)
+
+static int game_state_act_draw(struct game_state *game)
 {
     int amount = 1;
 
@@ -220,40 +210,33 @@ int game_state_act_draw(struct game_state *game)
 
     append_player_rand_cards(game, game->active_player_index, amount);
 
-    game->act = ACT_DRAW;
+    game->curr_act = ACT_DRAW;
     return 0;
 }
 
-int game_state_can_act_play(const struct game_state *game, struct act_play play)
+static int game_state_can_act_play(const struct game_state *game, struct act_args_play args)
 {
     int                     i, j, 
                             same_type, same_color;
     const struct card      *card = NULL;
     const struct card_list *hand;
-    enum play_arg_type      specs[PLAY_ARG_MAX];
 
     if (game->ended)
         return 0;
 
     hand = &game->players[game->active_player_index].hand;
     for (i = 0; i < hand->len; i++) {
-        if (hand->elems[i].id == play.card_id)
+        if (hand->elems[i].id == args.card_id)
             break;
     }
     if (i == hand->len)
         return 0;
     card = hand->elems + i;
 
-    card_get_arg_type_specs(specs, card);
-    for (i = 0; i < PLAY_ARG_MAX && specs[i] != PLAY_ARG_NONE; i++) {
-        if (play.args[i].type != specs[i])
-            return 0;
-    }
-
     same_type   = card_same_type(game->top_card, *card);
     same_color  = card_same_color(game->top_card, *card);
 
-    if (game->act == ACT_PLAY)
+    if (game->curr_act == ACT_PLAY)
         return same_type;
 
     if (game->batsu_pool && !same_type && card->type != CARD_PLUS4)
@@ -262,35 +245,40 @@ int game_state_can_act_play(const struct game_state *game, struct act_play play)
     return same_color || same_type || card->color == CARD_COLOR_BLACK;
 }
 
-int game_state_act_play(struct game_state *game, struct act_play play)
+static int game_state_act_play(struct game_state *game, struct act_args_play args)
 {
     struct player  *player  = game->players + game->active_player_index;
     size_t  index;
 
     for (index = 0; index < player->hand.len; index++) {
-        if (player->hand.elems[index].id == play.card_id)
+        if (player->hand.elems[index].id == args.card_id)
             break;
     }
 
     if (index == player->hand.len)
         return -1;
 
-    if (!game_state_can_act_play(game, play))
+    if (!game_state_can_act_play(game, args))
         return -1;
 
     game->top_card = player->hand.elems[index];
-    play_card_effect(game, &game->top_card, play.args);
+    play_card_effect(game, &game->top_card, args.color);
     card_list_remove_swp(&player->hand, &index, 1);
 
-    game->act = ACT_PLAY;
+    game->curr_act = ACT_PLAY;
     return 0;
 }
 
-int game_state_end_turn(struct game_state *game)
+static int game_state_can_act_end_turn(const struct game_state *game)
+{
+    return game->curr_act != ACT_NONE;
+}
+
+static int game_state_act_end_turn(struct game_state *game)
 {
     int increment;
 
-    if (game->ended || !game->act)
+    if (game->ended || !game->curr_act)
         return -1;
 
     if (game->players[game->active_player_index].hand.len == 0) {
@@ -305,9 +293,37 @@ int game_state_end_turn(struct game_state *game)
     if (game->active_player_index < 0)
         game->active_player_index += game->player_len;
 
-    game->act = ACT_NONE;
+    game->curr_act = ACT_NONE;
     game->turn++;
     return 0;
+}
+
+int game_state_can_act(const struct game_state *game, struct act act)
+{
+    switch (act.type) {
+        case ACT_PLAY:
+            return game_state_can_act_play(game, act.args.play);
+        case ACT_DRAW:
+            return game_state_can_act_draw(game);
+        case ACT_END_TURN:
+            return game_state_can_act_end_turn(game);
+        default:
+            return -1;
+    }
+}
+
+int game_state_act(struct game_state *game, struct act act)
+{
+    switch (act.type) {
+        case ACT_PLAY:
+            return game_state_act_play(game, act.args.play);
+        case ACT_DRAW:
+            return game_state_act_draw(game);
+        case ACT_END_TURN:
+            return game_state_act_end_turn(game);
+        default:
+            return -1;
+    }
 }
 
 
@@ -327,34 +343,28 @@ static enum card_color find_frequent_color(const struct card_list *hand)
     }
     return most_frequent;
 }
-int game_state_act_auto(struct game_state *game)
+
+int act_auto(const struct game_state *game, struct act *act)
 {
-    struct player      *player = game->players + game->active_player_index;
-    size_t              i;
-    enum play_arg_type  arg_specs[PLAY_ARG_MAX];
-    struct act_play     act_play = {0};
+    const struct player *player = game->players + game->active_player_index;
+    int i;
     
-    act_play.args[0].type = PLAY_ARG_COLOR;
-    act_play.args[1].type = PLAY_ARG_PLAYER;
+    if (game->curr_act) 
+        return -1;
 
-    if (game->act) 
-        return 0;
-
+    act->type = ACT_PLAY;
     for (i = 0; i < player->hand.len; i++) {
-        act_play.card_id = player->hand.elems[i].id;
+        act->args.play.card_id = player->hand.elems[i].id;
 
-        card_get_arg_type_specs(arg_specs, player->hand.elems + i);
-        if (arg_specs[0] == PLAY_ARG_COLOR)
-            act_play.args[0].u.color = find_frequent_color(&player->hand);
+        if (card_needs_color_arg(player->hand.elems + i))
+            act->args.play.color = find_frequent_color(&player->hand);
 
-        if (game_state_act_play(game, act_play) == 0)
-            i = 0;
+        if (game_state_can_act(game, *act))
+            return 0;
     } 
 
-    if (game->act)
-        return 0;
-    else
-        return game_state_act_draw(game) == 0 ? 0 : -2;
+    act->type = ACT_DRAW;
+    return game_state_can_act(game, *act) ? 0 : -2;
 }
 
 /* LOGGING & DEBUGGING */
@@ -437,7 +447,7 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
         " - top_card: ",
         game->turn,
         game->ended,
-        game->act,
+        game->curr_act,
         game->turn_dir,
         game->skip_pool,
         game->batsu_pool,

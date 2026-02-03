@@ -68,8 +68,9 @@ static struct graphic_session_info      session_info;
 static struct baked_font                font_spec_default;
 static struct graphic_texture          *font_tex;
 static struct graphic_vertecies        *card_vertecies;
-static struct network_connection       *server_conn;
 static struct network_buffer            sendbuff, recvbuff;
+static struct network_connection       *server_conn;
+static int                              is_hosting;
 
 static float                            aspect_ratio;
 static float                            ortho_height;
@@ -77,13 +78,13 @@ static vec3                             clear_color = {1, 1, 1};
 static mat4                             perspective;
 static mat4                             orthographic;
 
-DEFINE_ARRAY_LIST_WRAPPER(static, struct act_play, play_list);
+DEFINE_ARRAY_LIST_WRAPPER(static, struct act, act_list);
 static char                             gamelog_charbuff[4096]  = {0};
 static char                             ipv4_chrbuff[64]        = {0};
-static card_id_t                        card_ids[ENTITY_MAX] = {(card_id_t)-1};
+static card_id_t                        entity_card_id_map[ENTITY_MAX] = {(card_id_t)-1};
 
-static struct act_play                  curr_play = {0};
-static struct play_list                 staged_plays;
+static struct act                       curr_act;
+static struct act_list                  staged_acts;
 static enum {
     UI_STATE_MAKE_ACT,
     UI_STATE_SELECT_ARG,
@@ -120,46 +121,26 @@ void entity_discards_arrange()
         comp_system_interpolator_change(world_main.sys_interp, main_entity_discard.elems[i], target);
     }
 }
-static entity_t entity_card_create(const struct card *card)
+
+static void entity_card_represent(entity_t entity_card, const struct card *card)
 {
     char                        temp[8];
     const float                 TEXT_Z = 0.25f,
                                 CHAR_WIDTH = 0.2375;
+
     struct comp_transform      *transf;
     struct comp_visual         *visual;
-    struct comp_hitrect        *hitrect;
-    struct comp_interpolator   *interp;
-    entity_t                    main,
-                                text;
+    entity_t                    text;
 
-    main                    = entity_record_activate(&world_main.records);
-    transf                  = comp_system_transform_emplace(world_main.sys_transf, main);
-    visual                  = comp_system_visual_emplace(world_main.sys_vis, main, PROJ_PERSP);
-    interp                  = comp_system_interpolator_emplace(world_main.sys_interp, main);
-    hitrect                 = comp_system_hitrect_emplace(world_main.sys_hitrect, main);
-    comp_transform_set_default(transf);
-    comp_visual_set_default(visual);
-    comp_interpolator_set_default(interp);
-    comp_hitrect_set_default(hitrect);
-    transf->data.rot        = vec3_create(0, -PI/16, 0);
-    transf->data.scale      = vec3_all(1.7);
-    hitrect->rect           = CARD_BOUNDS;
-    hitrect->type           = HITRECT_CAMSPACE;
-    hitrect->hitmask        = HITMASK_MOUSE_DOWN;
-    visual->vertecies       = card_vertecies;
-    visual->texture         = NULL;
-    visual->color           = card_color_to_rgb(card->color);
-    interp->opt.ease_in     = 0.1f;
-    interp->opt.ease_out    = 0.2f;
+    visual          = comp_system_visual_get(world_main.sys_vis, entity_card);
+    visual->color   = card_color_to_rgb(card->color);
+    entity_card_id_map[entity_card] = card->id;
 
-    card_ids[main]          = card->id;
-
-    text                    = entity_record_activate(&world_main.records);
-    transf                  = comp_system_transform_emplace(world_main.sys_transf, text);
-    visual                  = comp_system_visual_emplace(world_main.sys_vis, text, PROJ_PERSP);
-    comp_transform_set_default(transf);
-    comp_visual_set_default(visual);
-    transf->data.scale      = vec3_create(0.014f, 0.014f, 0.014f);
+    text            = comp_system_family_view(world_main.sys_fam).first_child_map[entity_card];
+    transf          = comp_system_transform_get(world_main.sys_transf, text);
+    visual          = comp_system_visual_get(world_main.sys_vis, text);
+    if (visual->vertecies)
+        graphic_vertecies_destroy(visual->vertecies);
     switch (card->type) { /* should cache verts */
         case CARD_NUMBER:
             snprintf(temp, 8, "[ %i ]", card->num);
@@ -191,10 +172,51 @@ static entity_t entity_card_create(const struct card *card)
             visual->vertecies   = graphic_vertecies_create_text(font_spec_default, LINE_HEIGHT, "[ ??? ]", 0);
             break;
     }
-    visual->texture      = font_tex;
-    visual->color        = card->color == CARD_COLOR_BLACK ? VEC3_ONE : VEC3_ZERO;
-    visual->draw_pass    = DRAW_PASS_TRANSPARENT;
+    visual->color = card->color == CARD_COLOR_BLACK ? VEC3_ONE : VEC3_ZERO;
+}
+
+static entity_t entity_card_create(const struct card *card)
+{
+    char                        temp[8];
+    const float                 TEXT_Z = 0.25f,
+                                CHAR_WIDTH = 0.2375;
+    struct comp_transform      *transf;
+    struct comp_visual         *visual;
+    struct comp_hitrect        *hitrect;
+    struct comp_interpolator   *interp;
+    entity_t                    main,
+                                text;
+
+    main                    = entity_record_activate(&world_main.records);
+    transf                  = comp_system_transform_emplace(world_main.sys_transf, main);
+    visual                  = comp_system_visual_emplace(world_main.sys_vis, main, PROJ_PERSP);
+    interp                  = comp_system_interpolator_emplace(world_main.sys_interp, main);
+    hitrect                 = comp_system_hitrect_emplace(world_main.sys_hitrect, main);
+    comp_transform_set_default(transf);
+    comp_visual_set_default(visual);
+    comp_interpolator_set_default(interp);
+    comp_hitrect_set_default(hitrect);
+    transf->data.rot        = vec3_create(0, -PI/16, 0);
+    transf->data.scale      = vec3_all(1.7);
+    hitrect->rect           = CARD_BOUNDS;
+    hitrect->type           = HITRECT_CAMSPACE;
+    hitrect->hitmask        = HITMASK_MOUSE_DOWN;
+    visual->vertecies       = card_vertecies;
+    visual->texture         = NULL;
+    interp->opt.ease_in     = 0.1f;
+    interp->opt.ease_out    = 0.2f;
+
+    text                    = entity_record_activate(&world_main.records);
+    transf                  = comp_system_transform_emplace(world_main.sys_transf, text);
+    visual                  = comp_system_visual_emplace(world_main.sys_vis, text, PROJ_PERSP);
+    comp_transform_set_default(transf);
+    comp_visual_set_default(visual);
+    transf->data.scale      = vec3_create(0.014f, 0.014f, 0.014f);
+    visual->texture         = font_tex;
+    visual->draw_pass       = DRAW_PASS_TRANSPARENT;
     comp_system_family_adopt(world_main.sys_fam, main, text);
+
+    entity_card_represent(main, card);
 
     return main;
 }
@@ -205,7 +227,7 @@ static void entity_card_destroy(entity_t main)
 
     graphic_vertecies_destroy(comp_system_visual_get(world_main.sys_vis, text)->vertecies);
 
-    card_ids[main] = -1;
+    entity_card_id_map[main] = -1;
 
     entity_world_cleanup(&world_main, main);
     entity_world_cleanup(&world_main, text);
@@ -329,6 +351,28 @@ static entity_t entity_player_create(const struct player *player)
     return entity_player;
 }
 
+static void staged_acts_clear()
+{
+    struct comp_system_family_view  view;
+    entity_t                        entity_card;
+    size_t                          i;
+
+    view        = comp_system_family_view(world_main.sys_fam);
+    entity_card = view.first_child_map[main_entity_players[this_player_idx]];
+
+    for (;!entity_is_invalid(entity_card); entity_card = view.sibling_map[entity_card]) {
+        for (i = 0; i < staged_acts.len; i++) {
+            if (staged_acts.elems[i].args.play.card_id == entity_card_id_map[entity_card])
+                break;
+        }
+        if (i == staged_acts.len)
+            continue;
+
+        entity_card_start_unraise(entity_card);
+        act_list_remove_swp(&staged_acts, &i, 1);
+    }
+}
+
 void scene_init()
 {
     struct comp_transform   *transf;
@@ -346,7 +390,6 @@ void scene_init()
 
     for (i = 0; i < game_state->player_len; i++) {
         seat_idx = (this_player_idx + i) % game_state->player_len;
-        cuno_logf(LOG_INFO, "i=%d, seat_idx=%d", i, seat_idx);
 
         main_entity_players[i]  = entity_player_create(game_state->players + i);
         transf                  = comp_system_transform_get(world_main.sys_transf, main_entity_players[i]);
@@ -371,30 +414,32 @@ static void scene_remove_player_cards(const struct player *player, entity_t enti
 
     for (; !entity_is_invalid(entity_card); entity_card = next) {
         for (i = 0; i < player->hand.len; i++) {
-            if (player->hand.elems[i].id == card_ids[entity_card])
+            if (player->hand.elems[i].id == entity_card_id_map[entity_card])
                 break;
         }
 
         next = family_view.sibling_map[entity_card];
-
         if (i < player->hand.len)
             continue;
 
-        if (card_ids[entity_card] == game_state->top_card.id)
+        if (entity_card_id_map[entity_card] == game_state->top_card.id) {
             last_discard = entity_card;
-        else
+        } else {
             entity_discards_discard(entity_card);
+        }
     }
 
-    if (last_discard != ENTITY_INVALID)
+    if (last_discard != ENTITY_INVALID) {
+        entity_card_represent(last_discard, &game_state->top_card);
         entity_discards_discard(last_discard);
+    }
 
     entity_discards_arrange();
 }
 
 static void scene_add_player_cards(const struct player *player, entity_t entity_player)
 {
-    size_t                          entity_card_len;
+    size_t entity_card_len;
 
     entity_discards_free_old();
     /* relies on game_state appending behaviour */
@@ -405,10 +450,13 @@ static void scene_add_player_cards(const struct player *player, entity_t entity_
 static void scene_mirror_curr_turn()
 {
     int i;
+    staged_acts_clear();
     for (i = 0; i < game_state->player_len; i++) {
         scene_remove_player_cards(game_state->players + i, main_entity_players[i]);
         scene_add_player_cards(game_state->players + i, main_entity_players[i]);
     }
+    clear_color = game_state->active_player_index == this_player_idx ? 
+        vec3_create(135/255.0f, 255/255.0f, 184/255.0f) : vec3_create(255/255.0f, 167/255.0f, 82/255.0f);
 }
 
 static int resources_init(struct graphic_session *created_session)
@@ -437,50 +485,6 @@ static int resources_init(struct graphic_session *created_session)
     orthographic = mat4_orthographic(ORTHO_WIDTH, ortho_height, FAR); 
 
     return 1;
-}
-
-
-static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
-{
-    static int octet_count = 1;
-    static int octet_idx = 0;
-    static int digits = 0;
-
-    if (octet_count > 4) {
-        octet_count = 1;
-        digits = 0;
-        octet_idx = 0;
-        ipv4_chrbuff[octet_idx + digits] = '\0';
-    }
-
-    if (digits < 3) {
-        ipv4_chrbuff[octet_idx + digits] = (char)hitrect->tag;
-        digits++;
-        ipv4_chrbuff[octet_idx + digits] = '\0';
-    }
-
-    if (digits >= 3) {
-        octet_idx += snprintf(ipv4_chrbuff + octet_idx, sizeof(ipv4_chrbuff) - octet_idx, 
-                        octet_count < 4 ? "%d." : "%d", atoi(ipv4_chrbuff + octet_idx));
-
-        octet_count++;
-        digits = 0;
-    }
-    entity_text_change(&world_menu, &default_txtopt, menu_entity_txt_ipv4, ipv4_chrbuff);
-}
-
-static void on_host_btn(entity_t e, struct comp_hitrect *hitrect)
-{
-}
-
-static void on_connect_btn(entity_t e, struct comp_hitrect *hitrect)
-{
-    server_conn = network_connection_create(ipv4_chrbuff, CUNO_PORT);
-    if (!server_conn) {
-        clear_color = VEC3_RED;
-        return;
-    }
-    active_world = &world_main;
 }
 
 static void enable_popup_play_arg_color(entity_t entity_card)
@@ -518,195 +522,141 @@ static void disable_popup_play_arg_color()
     }
 }
 
-static void enable_popup_play_arg_target_player() { /* TODO: Implement. */ }
-static void disable_popup_play_arg_target_player() { /* TODO: Implement. */ }
-
-static void enable_popup_play_arg(enum play_arg_type arg, entity_t entity_card)
-{
-    switch(arg) {
-        case PLAY_ARG_COLOR:
-            enable_popup_play_arg_color(entity_card);
-            return;
-        case PLAY_ARG_PLAYER:
-            enable_popup_play_arg_target_player();
-            return;
-        case PLAY_ARG_NONE:
-            break;
-    }
-}
-static void staged_plays_try_play(entity_t entity_card)
+static void staged_acts_try_play(entity_t entity_card)
 {
     static entity_t     last_attempt;
 
     int                 i;
-    enum play_arg_type  arg_specs[PLAY_ARG_MAX] = {0};
     const struct card  *card;
+    char                continuation = 0;
 
-    if (entity_card == ENTITY_INVALID)
+    if (entity_card == ENTITY_INVALID) {
         entity_card = last_attempt;
-    else {
-        curr_play = ACT_PLAY_ZERO;
+        continuation = 1;
+    } else {
         last_attempt = entity_card;
     }
 
-    card = active_player_find_card(game_state, card_ids[entity_card]);
+    card = active_player_find_card(game_state, entity_card_id_map[entity_card]);
 
-    curr_play.card_id = card->id;
-    card_get_arg_type_specs(arg_specs, card);
-    for (i = 0; i < PLAY_ARG_MAX; i++) {
-        if (arg_specs[i] == PLAY_ARG_NONE)
-            break;
+    curr_act.type = ACT_PLAY;
+    curr_act.args.play.card_id = card->id;
 
-        if (arg_specs[i] != curr_play.args[i].type) {
-            enable_popup_play_arg(arg_specs[i], entity_card);
-            global_ui_state = UI_STATE_SELECT_ARG;
-            return;
-        }
+    if (!continuation && card_needs_color_arg(card)) {
+        enable_popup_play_arg_color(entity_card);
+        global_ui_state = UI_STATE_SELECT_ARG;
+        return;
     }
-    global_ui_state = UI_STATE_MAKE_ACT;
- cuno_logf(LOG_INFO, "made act");
-    if (!staged_plays.len)
+
+    if (!staged_acts.len)
         game_state_copy_into(&game_state_alt, game_state);
 
-    if (!game_state_can_act_play(&game_state_alt, curr_play))
+    if (!game_state_can_act(&game_state_alt, curr_act))
         return;
 
-    game_state_act_play(&game_state_alt, curr_play);
-    play_list_append(&staged_plays, &curr_play, 1);
- cuno_logf(LOG_INFO, "appended");
+    game_state_act(&game_state_alt, curr_act);
+    act_list_append(&staged_acts, &curr_act, 1);
     entity_card_start_raise(entity_card);
 }
-static void staged_plays_try_unplay(entity_t entity_card)
+static void staged_acts_try_unplay(entity_t entity_card)
 {
     struct transform    target;
     size_t              i, card_index;
 
     game_state_copy_into(&game_state_alt, game_state);
-    for (i = 0; i < staged_plays.len; i++) {
-        if (staged_plays.elems[i].card_id == card_ids[entity_card]) {
+    for (i = 0; i < staged_acts.len; i++) {
+        if (staged_acts.elems[i].args.play.card_id == entity_card_id_map[entity_card]) {
             card_index = i;
             continue;
         }
 
-        if (game_state_act_play(&game_state_alt, staged_plays.elems[i]) != 0)
+        if (game_state_act(&game_state_alt, staged_acts.elems[i]) != 0)
             break;
     }
-    if (i == staged_plays.len) {
-        play_list_remove_sft(&staged_plays, &card_index, 1);
+    if (i == staged_acts.len) {
+        act_list_remove_sft(&staged_acts, &card_index, 1);
         entity_card_start_unraise(entity_card);
         return;
     }
 
     game_state_copy_into(&game_state_alt, game_state);
-    for (i = 0; i < staged_plays.len; i++)
-        game_state_act_play(&game_state_alt, staged_plays.elems[i]);
-}
-static void staged_plays_clear()
-{
-    struct comp_system_family_view  view;
-    entity_t                        entity_card;
-    size_t                          i;
-
-    view        = comp_system_family_view(world_main.sys_fam);
-    entity_card = view.first_child_map[main_entity_players[this_player_idx]];
-
-    for (;!entity_is_invalid(entity_card); entity_card = view.sibling_map[entity_card]) {
-        for (i = 0; i < staged_plays.len; i++) {
-            if (staged_plays.elems[i].card_id == card_ids[entity_card])
-                break;
-        }
-        if (i == staged_plays.len)
-            continue;
-
-        entity_card_start_unraise(entity_card);
-        play_list_remove_swp(&staged_plays, &i, 1);
-    }
-}
-static void gui_apply_turn()
-{
-    staged_plays_clear();
-    scene_mirror_curr_turn();
-    
-    log_game_state(gamelog_charbuff, sizeof(gamelog_charbuff), game_state, 0);
-    entity_text_change(&world_main, &default_txtopt, main_entity_txt_debug, gamelog_charbuff);
-    cuno_logf(LOG_INFO, gamelog_charbuff);
-}
-static void on_state_select_arg()
-{
-    int                             i;
-    enum card_color                 color;
-
-    for (i = 0; i < PLAY_ARG_MAX; i++) {
-        if (curr_play.args[i].type == PLAY_ARG_NONE)
-            break;
-    }
-
-    for (color = 0; color < CARD_COLOR_MAX; color++) {
-        if (!comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, main_entity_btn_colors[color]))
-            continue;
-
-        curr_play.args[i].type      = PLAY_ARG_COLOR;
-        curr_play.args[i].u.color   = color;
-
-        staged_plays_try_play(ENTITY_INVALID);
-        disable_popup_play_arg_color();
-        return;
-    }
-
-    /* Implement Player picking checks here if no colors are chosen
-     * foreach clickable player hitrects...
-     *         if any of them are hit, update curr_play.args[i] 
-     *         staged_plays_try_play();
-     *
-     * */
-    return;
+    for (i = 0; i < staged_acts.len; i++)
+        game_state_act(&game_state_alt, staged_acts.elems[i]);
 }
 
 static void on_card_hit(entity_t entity_card)
 {
     int i;
 
-    cuno_logf(LOG_INFO, "enter on card hit");
-
-    for (i = 0; i < staged_plays.len; i++) {
-        if (staged_plays.elems[i].card_id == card_ids[entity_card])
+    for (i = 0; i < staged_acts.len; i++) {
+        if (staged_acts.elems[i].args.play.card_id == entity_card_id_map[entity_card])
             break;
     }
-    if (i == staged_plays.len) {
-        staged_plays_try_play(entity_card);
+    if (i == staged_acts.len) {
+        staged_acts_try_play(entity_card);
     } else {
-        staged_plays_try_unplay(entity_card);
+        staged_acts_try_unplay(entity_card);
     }
 
 }
 
-static void send_server_act(const char *actcmd)
+static void send_server_act(struct act act)
 {
     struct network_header hdr = {
         .version = NETMSG_VER,
-        .type = MSG_ACT,
-        .len = strlen(actcmd),
+        .type = MSG_GM_ACT,
+        .len = act_serialize(NULL, act)
     };
+
+    if (is_hosting) {
+        server_handle_act(act);
+        return;
+    }
+
     network_buffer_make_space(&sendbuff, hdr.len + NETHDR_SERIALIZED_SIZE);
     network_header_serialize(&sendbuff.tail, &hdr);
-    network_pack_str(&sendbuff.tail, actcmd);
+    act_serialize(&sendbuff.tail, act);
 }
 
-static void send_server_plays()
+static void send_server_act_plays()
 {
-    char buff[64];
-    int buff_len = 0;
+    struct act end = { .type = ACT_END_TURN };
     int i;
 
-    for (i = 0; i < staged_plays.len; i++)
-        buff_len += snprintf(buff + buff_len, ARRAY_SIZE(buff) - buff_len, "p%d", staged_plays.elems[i].card_id);
+    for (i = 0; i < staged_acts.len; i++)
+        send_server_act(staged_acts.elems[i]);
 
-    send_server_act(buff);
+    send_server_act(end);
 }
 
-static void send_server_draw()
+static void send_server_act_draw()
 {
-    send_server_act("d");
+    struct act act;
+    int i;
+
+    act.type = ACT_DRAW;
+    send_server_act(act);
+
+    act.type = ACT_END_TURN;
+    send_server_act(act);
+}
+
+static void on_state_select_arg()
+{
+    int                 i;
+    enum card_color     color;
+
+    for (color = 0; color < CARD_COLOR_MAX; color++) {
+        if (!comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, main_entity_btn_colors[color]))
+            continue;
+
+        curr_act.args.play.color = color;
+
+        staged_acts_try_play(ENTITY_INVALID);
+        disable_popup_play_arg_color();
+        return;
+    }
+    return;
 }
 
 static void on_state_make_act()
@@ -729,13 +679,13 @@ static void on_state_make_act()
 
     top_card = main_entity_discard.elems[main_entity_discard.len-1];
 
-    if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, top_card) && staged_plays.len > 0)
-        send_server_plays();
+    if (comp_system_hitrect_check_and_clear_state(world_main.sys_hitrect, top_card) && staged_acts.len > 0)
+        send_server_act_plays();
 }
 
 static void on_btn_draw(entity_t entity, struct comp_hitrect *hitrect)
 {
-    send_server_draw();
+    send_server_act_draw();
 }
 
 static void on_hitrect_state_update()
@@ -754,16 +704,27 @@ static void on_hitrect_state_update()
     }
 }
 
-static void render()
+void on_game_state_update()
 {
-    graphic_clear(clear_color.x, clear_color.y, clear_color.z);
-    comp_system_visual_draw(active_world->sys_vis, &perspective, &orthographic);
-    graphic_render(session);
+    static char started = 0;
+
+    log_game_state(gamelog_charbuff, sizeof(gamelog_charbuff), game_state, 0);
+    entity_text_change(&world_main, &default_txtopt, main_entity_txt_debug, gamelog_charbuff);
+    cuno_logf(LOG_INFO, gamelog_charbuff);
+
+    if (!started) {
+        started = 1;
+        this_player_idx = find_player_idx(game_state, this_player_id);
+        scene_init();
+    } else {
+        scene_mirror_curr_turn();
+    }
 }
 
 static double auto_act_time = -1;
 void player_auto()
 {
+    struct act act;
     const double ACT_DELAY = 1.4;
 
     if (game_state->active_player_index != 1)
@@ -773,12 +734,119 @@ void player_auto()
     if (auto_act_time == -1)
         auto_act_time = get_monotonic_time() + ACT_DELAY;
     else if (auto_act_time <= get_monotonic_time()) {
-        game_state_act_auto(&game_state_mut);
-        gui_apply_turn();
+        act_auto(game_state, &act);
+        game_state_act(&game_state_mut, act);
+        on_game_state_update();
         clear_color.x = 1;
         auto_act_time = -1;
     }
 }
+
+void handle_local_recv(short type, const void *data)
+{
+    switch (type) {
+        case MSG_GM_START:
+            this_player_id = *(int *)data;
+            active_world = &world_main;
+            return;
+        case MSG_GM_STATE:
+            game_state_copy_into(&game_state_mut, data);
+            on_game_state_update();
+            return;
+        default:
+            cuno_logf(LOG_ERR, "Unhandled local MSG type %d\n", type);
+            return;
+    }
+}
+
+void network_update()
+{
+    struct network_header header;
+
+    network_connection_sendrecv_nb(server_conn, &sendbuff, &recvbuff);
+    while (NETWORK_BUFFER_LEN(recvbuff)) {
+        if (!network_buffer_peek_hdrmsg(&recvbuff))
+            return;
+
+        network_header_deserialize(&header, &recvbuff.head);
+
+        switch (header.type) {
+            case MSG_GM_START:
+                this_player_id = network_unpack_u8(&recvbuff.head);
+                active_world = &world_main;
+                return;
+            case MSG_GM_STATE:
+                game_state_deserialize(&game_state_mut, &recvbuff.head);
+                on_game_state_update();
+                return;
+            default:
+                cuno_logf(LOG_ERR, "Unhandled MSG type %d\n", header.type);
+                return;
+        }
+    }
+}
+
+static void render()
+{
+    graphic_clear(clear_color.x, clear_color.y, clear_color.z);
+    comp_system_visual_draw(active_world->sys_vis, &perspective, &orthographic);
+    graphic_render(session);
+}
+
+static void on_entity_keyboard_hit(entity_t e, struct comp_hitrect *hitrect)
+{
+    static int octet_count = 1;
+    static int octet_idx = 0;
+    static int digits = 0;
+
+    if (octet_count > 4) {
+        octet_count = 1;
+        digits = 0;
+        octet_idx = 0;
+        ipv4_chrbuff[octet_idx + digits] = '\0';
+    }
+
+    if (digits < 3) {
+        ipv4_chrbuff[octet_idx + digits] = (char)hitrect->tag;
+        digits++;
+        ipv4_chrbuff[octet_idx + digits] = '\0';
+    }
+
+    if (digits >= 3) {
+        octet_idx += snprintf(ipv4_chrbuff + octet_idx, sizeof(ipv4_chrbuff) - octet_idx, 
+                        octet_count < 4 ? "%d." : "%d", atoi(ipv4_chrbuff + octet_idx));
+
+        octet_count++;
+        digits = 0;
+    }
+    entity_text_change(&world_menu, &default_txtopt, menu_entity_txt_ipv4, ipv4_chrbuff);
+}
+
+static void on_btn_host(entity_t e, struct comp_hitrect *hitrect)
+{
+    static int initialized = 0;
+    if (!initialized) {
+        server_register_local(&handle_local_recv);
+        server_init(CUNO_PORT, PLAYER_MAX);
+        initialized = 1;
+        clear_color = VEC3_BLUE;
+    } else {
+        server_start_game();
+        clear_color = VEC3_ONE;
+    }
+    is_hosting = 1;
+}
+
+static void on_btn_connect(entity_t e, struct comp_hitrect *hitrect)
+{
+    server_conn = network_connection_create(ipv4_chrbuff, CUNO_PORT);
+    if (!server_conn) {
+        clear_color = VEC3_RED;
+        return;
+    }
+    active_world = &world_main;
+}
+
 
 static void entities_init()
 {
@@ -813,7 +881,7 @@ static void entities_init()
     int i;
 
     entity_list_init(&main_entity_discard, 1);
-    play_list_init(&staged_plays, 1);
+    act_list_init(&staged_acts, 1);
 
     btnargs = DEFAULT_BTNARGS;
     btnargs.pos             = vec3_create(-150, -500, -2);
@@ -836,20 +904,21 @@ static void entities_init()
 
     btnargs = DEFAULT_BTNARGS;
     btnargs.pos             = vec3_create(-300, 400, -1);
-    btnargs.scale           = vec3_create(180, 45, 1);
+    btnargs.scale           = vec3_create(180, 65, 1);
     btnargs.color           = VEC3_GREEN;
     btnargs.text_scale      = 25;
     btnargs.label           = "Connect";
-    btnargs.hit_handler     = &on_connect_btn;
+    btnargs.hit_handler     = &on_btn_connect;
     menu_entity_btn_connect = entity_button_create(&world_menu, &btnargs);
 
     btnargs = DEFAULT_BTNARGS;
     btnargs.pos             = vec3_create(0, 400, -1);
-    btnargs.scale           = vec3_create(120, 45, 1);
+    btnargs.scale           = vec3_create(140, 65, 1);
     btnargs.color           = VEC3_RED;
+    btnargs.text_color      = VEC3_ONE;
     btnargs.text_scale      = 25;
     btnargs.label           = "Host";
-    btnargs.hit_handler     = &on_host_btn;
+    btnargs.hit_handler     = &on_btn_host;
     menu_entity_btn_host    = entity_button_create(&world_menu, &btnargs);
     comp_system_transform_desync_everything(world_menu.sys_transf);
 
@@ -909,41 +978,6 @@ int game_init(struct graphic_session *created_session)
     return 0;
 }
 
-void network_update()
-{
-    struct network_header header;
-    static char started = 0;
-
-    network_connection_sendrecv_nb(server_conn, &sendbuff, &recvbuff);
-    while (NETWORK_BUFFER_LEN(recvbuff)) {
-        if (!network_buffer_peek_hdrmsg(&recvbuff))
-            return;
-
-        network_header_deserialize(&header, &recvbuff.head);
-
-        switch (header.type) {
-            case MSG_GMSTATE:
-                game_state_deserialize(&game_state_mut, &recvbuff.head);
-                if (started) {
-                    gui_apply_turn();
-                    cuno_logf(LOG_INFO, "APPLIED TURN");
-                } else {
-                    started = 1;
-                    this_player_idx = find_player_idx(game_state, this_player_id);
-                    scene_init();
-                    cuno_logf(LOG_INFO, "SCENE_INIT");
-                }
-                return;
-            case MSG_GMSTART:
-                this_player_id = network_unpack_u8(&recvbuff.head);
-                return;
-            default:
-                cuno_logf(LOG_ERR, "Unhandled MSG type %d\n", header.type);
-                return;
-        }
-    }
-}
-
 void game_update()
 {
     if (!session)
@@ -953,6 +987,8 @@ void game_update()
     comp_system_interpolator_update(active_world->sys_interp);
 
     network_update();
+    if (is_hosting)
+        server_update();
     /* if (active_world == &world_main)
         player_auto(); */
 

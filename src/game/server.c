@@ -1,5 +1,4 @@
 #include "engine/system/network.h"
-#include "engine/system/log.h"
 #include "engine/system/time.h"
 #include "serialize.h"
 #include "server.h"
@@ -11,6 +10,8 @@ struct player_connection      server_conns[PLAYER_MAX] = {0};
 int                           server_conn_len;
 char                          server_game_started = 0;
 struct network_buffer         server_recvbuff;
+
+int                           server_max_player;
 
 int server_register_local(void (*recvmsg)(short type, const void *data))
 {
@@ -26,7 +27,7 @@ void server_broadcast_game_start()
 {
     struct network_header header = {
         .version = NETMSG_VER,
-        .type = MSG_GMSTART
+        .type = MSG_GM_START
     };
     int i;
 
@@ -50,7 +51,7 @@ void server_broadcast_state()
     struct game_state temp;
     struct network_header header = {
         .version = NETMSG_VER,
-        .type = MSG_GMSTATE,
+        .type = MSG_GM_STATE,
         .len = 0,
     };
     int i;
@@ -74,45 +75,44 @@ void server_broadcast_state()
     }
 }
 
-void server_process_act(const char *input)
+int server_handle_act(struct act act)
 {
-    struct act_play play = { 0 };
-
-    if (input[0] == 'p') {
-        play.card_id = atoi(input + 1);
-        game_state_act_play(&server_state, play);
-    } else {
-        game_state_act_draw(&server_state);
-    }
-    game_state_end_turn(&server_state);
-    server_broadcast_state();
+    int res = game_state_act(&server_state, act);
+    if (res == 0)
+        server_broadcast_state();
+    return res;
 }
 
 void server_process_recvbuff()
 {
+    static int printed = 0;
     struct network_header header;
-    char input[16];
+    struct act act;
 
     if (!network_buffer_peek_hdrmsg(&server_recvbuff))
         return;
 
     network_header_deserialize(&header, &server_recvbuff.head);
     switch (header.type) {
-        case MSG_ACT:
-            network_unpack_str(input, &server_recvbuff.head);
-            server_process_act(input);
+        case MSG_GM_ACT:
+            act = act_deserialize(&server_recvbuff.head);
+            server_handle_act(act);
             return;
         default:
-            cuno_logf(LOG_ERR, "Unhandled MSG type %d\n", header.type);
+            if (printed)
+                break;
+            printed = 1;
+            printf("Header received: len %d type %d\n", header.len, header.type);
             return;
     }
 }
 
-void server_start(struct network_listener *listener)
+void server_init(int port, int max_players)
 {
-    network_buffer_init(&server_recvbuff, 128);
+    network_buffer_init(&server_recvbuff, 64 * max_players);
     game_state_init(&server_state);
-    server_listener = listener;
+    server_listener = network_listener_create(port, max_players);
+    server_max_player = max_players;
 }
 
 void server_start_game()
@@ -140,7 +140,7 @@ void server_update()
         network_buffer_init(&server_conns[server_conn_len].sendbuff, 1024);
         server_conn_len++;
 
-        if (server_conn_len >= 2)
+        if (server_conn_len >= server_max_player)
             server_start_game();
     }
 
