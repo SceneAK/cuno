@@ -39,7 +39,7 @@ struct baked_font create_ascii_baked_font(unsigned char *ttf)
     return font;
 }
 
-float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text, bool try_normalize)
+float *create_text_verts(struct baked_font font, size_t *vert_count, float line_height, const char *text, char try_normalize)
 {
     struct codepoint    cp;
     float               cp_width, cp_height;
@@ -88,7 +88,7 @@ float *create_text_verts(struct baked_font font, size_t *vert_count, float line_
     return vert_data;
 }
 
-struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text, bool normalize)
+struct graphic_vertecies *graphic_vertecies_create_text(struct baked_font font, float line_height, const char *text, char normalize)
 {
     struct graphic_vertecies *graphic_verts;
     size_t                   vert_count;

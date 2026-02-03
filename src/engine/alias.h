@@ -3,12 +3,6 @@
 
 #include <stdint.h>
 
-typedef char bool;
-enum {
-    false = 0,
-    true = 1
-};
-
 typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
