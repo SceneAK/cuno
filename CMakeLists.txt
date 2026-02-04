@@ -4,9 +4,12 @@ project(cuno
 	LANGUAGES C)
 set(C_STANDARD 99)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY 
+    ${CMAKE_BINARY_DIR}/bin CACHE FILEPATH "Runtime Output Dir")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY 
+    ${CMAKE_BINARY_DIR}/lib CACHE FILEPATH "Archive Output Dir")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY 
+    ${CMAKE_BINARY_DIR}/lib CACHE FILEPATH "Library Output Dir")
 
 add_subdirectory("src/engine")
 add_subdirectory("src/game")
@@ -15,7 +18,7 @@ if(ANDROID)
 	add_subdirectory("platform/android")
 elseif(EMSCRIPTEN)
 	add_subdirectory("platform/wasm")
-elseif(UNIX)
+elseif(UNIX AND NO_GUI)
     message(STATUS "UNIX cli patch")
     add_executable(cuno)
     target_link_libraries(cuno game)
