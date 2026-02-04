@@ -454,7 +454,7 @@ size_t log_game_state(char *buffer, size_t buffer_len, const struct game_state *
         game->active_player_index);
     total += log_card(buffer + total, buffer_len - total, &game->top_card, hide_unknowns);
     for (i = 0; i < game->player_len; i++) {
-        total += snprintf(buffer + total, buffer_len - total, "Player %i: (total %lu)\n", i, game->players[i].hand.len);
+        total += snprintf(buffer + total, buffer_len - total, "Player %i: (total %u)\n", i, (unsigned)game->players[i].hand.len);
         total += log_hand(buffer + total, buffer_len - total, game->players + i, hide_unknowns);
     }
     return total;
